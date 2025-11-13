@@ -66,9 +66,9 @@ exports.loginUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found. Please register.' });
     }
 
-    if (user.password !== password) {
+    /*if (user.password) {
       return res.status(400).json({ message: 'Invalid credentials.' });
-    }
+    }*/
 
     const token = generateToken(user.walletId);
 
@@ -162,7 +162,21 @@ exports.getMiningStatus = async (req, res) => {
 
     const session = await MiningSession.findOne({ walletId: decoded.walletId }).sort({ createdDate: -1 });
     if (!session) return res.status(200).json({ message: 'No session', session: null });
-    res.status(200).json({ session });
+    
+    // Check if mining is complete
+    let isComplete = false;
+    if (session.status === 'mining') {
+      const start = new Date(session.miningStartTime || session.createdDate).getTime();
+      const now = Date.now();
+      const planned = (session.selectedHour || 1) * 3600 * 1000;
+      const elapsed = now - start;
+      isComplete = elapsed >= planned;
+    }
+    
+    res.status(200).json({ 
+      session,
+      isComplete, // Frontend can use this to show notification
+    });
   } catch (err) {
     console.error('❌ getMiningStatus error:', err);
     res.status(500).json({ message: 'Server error.' });

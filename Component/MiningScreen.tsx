@@ -175,15 +175,56 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     try {
       const resp = await miningAPI.getStatus();
       if (resp && resp.session && resp.session._id === sessionId) {
-        setSession(resp.session);
+        const sess = resp.session;
+        setSession(sess);
         
-        if (resp.session.status === 'claimed') {
+        // Check if session is claimed
+        if (sess.status === 'claimed') {
           if (intervalRef.current) clearInterval(intervalRef.current);
+          setSecondsLeft(0);
+          setEarned(sess.totalEarned || 0);
           Alert.alert(
             'Session Completed',
             'This mining session has been claimed.',
             [{text: 'OK', onPress: () => navigation.navigate('Home')}]
           );
+          return;
+        }
+        
+        // Recalculate from backend's miningStartTime
+        const start = new Date(sess.miningStartTime || sess.createdDate).getTime();
+        const now = Date.now();
+        const planned = (sess.selectedHour || 1) * 3600;
+        const elapsed = Math.floor((now - start) / 1000);
+        const remaining = Math.max(0, planned - elapsed);
+        const currentEarned = Math.min(elapsed, planned) * BASE_RATE * (sess.multiplier || 1);
+        
+        console.log('🔄 Syncing with backend:');
+        console.log('   - Backend start time:', new Date(start).toLocaleString());
+        console.log('   - Elapsed:', elapsed, 'seconds');
+        console.log('   - Remaining:', remaining, 'seconds');
+        console.log('   - Current earned:', currentEarned.toFixed(2), 'CMT');
+        
+        // Update timer and earned from backend calculation
+        setSecondsLeft(remaining);
+        setEarned(currentEarned);
+        
+        // If timer is complete (remaining = 0), show notification
+        if (remaining === 0 && sess.status !== 'claimed') {
+          console.log('⏰ Backend sync detected timer complete!');
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          
+          // Show notification immediately
+          await NotificationService.showCustomNotification(
+            '⏰ Mining Complete!',
+            `Your rewards are ready! You earned ${currentEarned.toFixed(2)} CMT. Tap to claim now!`,
+            {
+              type: 'mining_complete',
+              screen: 'Mining',
+              sessionId: String(sessionId),
+            }
+          );
+          console.log('✅ Notification shown from backend sync');
         }
       }
     } catch (err) {
@@ -353,40 +394,54 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
       return;
     }
 
+    // Calculate from backend's miningStartTime (server-side timestamp)
     const start = new Date(sess.miningStartTime || sess.createdDate).getTime();
     const now = Date.now();
     const elapsed = Math.floor((now - start) / 1000);
     const remaining = Math.max(0, planned - elapsed);
     
+    console.log('📊 MiningScreen: Calculating from backend data');
+    console.log('   - Backend start time:', new Date(start).toLocaleString());
+    console.log('   - Current time:', new Date(now).toLocaleString());
+    console.log('   - Elapsed seconds:', elapsed, `(${Math.floor(elapsed / 60)} minutes)`);
+    console.log('   - Planned duration:', planned, 'seconds');
+    console.log('   - Remaining seconds:', remaining, `(${Math.floor(remaining / 60)} minutes)`);
+    
     const isFreshSession = elapsed < 10 && isFirstLoadRef.current;
     
     if (isFreshSession) {
+      // Brand new session (just started)
       setSecondsLeft(planned);
       setEarned(0);
-      console.log('MiningScreen: Fresh session - starting from', planned, 'seconds');
+      console.log('✅ Fresh session - Timer: Full duration, Earned: 0.00');
     } else {
+      // Resumed session (app reopened or refreshed)
       const initialEarned = Math.min(elapsed, planned) * BASE_RATE * (sess.multiplier || 1);
       setSecondsLeft(remaining);
       setEarned(initialEarned);
-      console.log('MiningScreen: Resumed session - remaining:', remaining, 'earned:', initialEarned.toFixed(2));
+      console.log('✅ Resumed session - Timer:', remaining, 'seconds, Earned:', initialEarned.toFixed(2), 'CMT');
     }
     
     isFirstLoadRef.current = false;
 
     if (intervalRef.current) clearInterval(intervalRef.current);
     
+    // Start interval that recalculates from backend time every second
     if (!paused) {
       intervalRef.current = setInterval(() => {
-        setSecondsLeft(prev => {
-          const newLeft = Math.max(0, prev - 1);
-          // Stop timer when it reaches 0
-          // Notification will be shown by useEffect watching secondsLeft
-          if (newLeft === 0 && prev > 0) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-          }
-          return newLeft;
-        });
-        setEarned(prev => prev + BASE_RATE * (sess.multiplier || 1));
+        // Recalculate from backend time (not from previous state)
+        const currentNow = Date.now();
+        const currentElapsed = Math.floor((currentNow - start) / 1000);
+        const currentRemaining = Math.max(0, planned - currentElapsed);
+        const currentEarned = Math.min(currentElapsed, planned) * BASE_RATE * (sess.multiplier || 1);
+        
+        setSecondsLeft(currentRemaining);
+        setEarned(currentEarned);
+        
+        // Stop timer when complete
+        if (currentRemaining === 0) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+        }
       }, 1000);
     }
   };
@@ -433,6 +488,9 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     try {
       console.log('🎁 MiningScreen: User clicked claim button');
       console.log('   - Current earned (frontend):', earned.toFixed(2));
+      
+      // Cancel scheduled notification since user is claiming manually
+      await NotificationService.cancelScheduledMiningNotification(sessionId);
       
       // Call backend to claim the session
       const resp = await miningAPI.claimSession(sessionId);

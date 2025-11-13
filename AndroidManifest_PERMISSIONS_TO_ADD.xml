@@ -1,0 +1,33 @@
+<!-- 
+  Copy these permissions and paste them in:
+  android/app/src/main/AndroidManifest.xml
+  
+  Add them INSIDE the <manifest> tag, BEFORE the <application> tag
+-->
+
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.VIBRATE" />
+
+<!-- 
+  Your AndroidManifest.xml should look like this:
+  
+  <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+      
+      <uses-permission android:name="android.permission.INTERNET" />
+      <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+      <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+      <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+      <uses-permission android:name="android.permission.WAKE_LOCK" />
+      <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+      <uses-permission android:name="android.permission.VIBRATE" />
+      
+      <application>
+          ... your existing code ...
+      </application>
+  </manifest>
+-->

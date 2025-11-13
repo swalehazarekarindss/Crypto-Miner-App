@@ -3,6 +3,7 @@ import notifee, {
   EventType,
   Notification,
   AuthorizationStatus,
+  TriggerType,
 } from '@notifee/react-native';
 import {Platform} from 'react-native';
 
@@ -245,6 +246,95 @@ class NotificationService {
     const notifications = await notifee.getDisplayedNotifications();
     console.log('📋 Currently displayed notifications:', notifications.length);
     return notifications;
+  }
+
+  // Schedule notification for when mining completes
+  async scheduleMiningCompleteNotification(
+    miningStartTime: Date,
+    durationHours: number,
+    earnedAmount: number,
+    sessionId: string
+  ): Promise<string | null> {
+    try {
+      // Calculate when the mining will complete
+      const completionTime = new Date(miningStartTime.getTime() + durationHours * 3600 * 1000);
+      const now = new Date();
+      
+      const secondsUntilCompletion = Math.floor((completionTime.getTime() - now.getTime()) / 1000);
+      
+      console.log('   - Will complete at:', completionTime.toLocaleString());
+      console.log('   - Time until completion:', Math.floor((completionTime.getTime() - now.getTime()) / 1000), 'seconds');
+      
+      // Create trigger for the exact completion time
+      const trigger: any = {
+        type: TriggerType.TIMESTAMP,
+        timestamp: completionTime.getTime(),
+      };
+      
+      // Schedule the notification
+      const notificationId = await notifee.createTriggerNotification(
+        {
+          id: `mining-complete-${sessionId}`,
+          title: '⏰ Mining Complete!',
+          body: `Your rewards are ready! You earned ${earnedAmount.toFixed(2)} CMT. Tap to claim now!`,
+          android: {
+            channelId: this.channelId,
+            importance: AndroidImportance.HIGH,
+            pressAction: {
+              id: 'default',
+              launchActivity: 'default',
+            },
+            smallIcon: 'ic_launcher',
+            color: '#10b981',
+            sound: 'default',
+            vibrationPattern: [300, 500],
+            showTimestamp: true,
+          },
+          ios: {
+            sound: 'default',
+            foregroundPresentationOptions: {
+              alert: true,
+              badge: true,
+              sound: true,
+            },
+          },
+          data: {
+            type: 'mining_complete',
+            screen: 'Mining',
+            sessionId: String(sessionId),
+          },
+        },
+        trigger
+      );
+      
+      console.log('✅ Scheduled notification ID:', notificationId);
+      
+      // Verify the notification was scheduled
+      const triggers = await notifee.getTriggerNotifications();
+      console.log('📋 Total scheduled notifications:', triggers.length);
+      const ourNotif = triggers.find(t => t.notification.id === `mining-complete-${sessionId}`);
+      if (ourNotif) {
+        console.log('✅ Verified: Notification is scheduled');
+        console.log('   - Trigger type:', ourNotif.trigger.type);
+      } else {
+        console.log('⚠️ Warning: Notification not found in scheduled list');
+      }
+      
+      return notificationId;
+    } catch (error) {
+      console.error('❌ Error scheduling notification:', error);
+      return null;
+    }
+  }
+
+  // Cancel scheduled mining notification
+  async cancelScheduledMiningNotification(sessionId: string) {
+    try {
+      await notifee.cancelNotification(`mining-complete-${sessionId}`);
+      console.log('🗑️ Cancelled scheduled notification for session:', sessionId);
+    } catch (error) {
+      console.error('❌ Error cancelling scheduled notification:', error);
+    }
   }
 }
 

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const userRoutes = require('./routes/userMinningroutes');
+const { startMiningChecker, cleanupNotifiedSessions } = require('./services/miningChecker');
 
 // Load environment variables
 dotenv.config();
@@ -26,7 +27,14 @@ mongoose.connect(process.env.DBURL, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-  .then(() => console.log('✅ MongoDB Connected'))
+  .then(() => {
+    console.log('✅ MongoDB Connected');
+    
+    // Start mining checker after DB connection
+    startMiningChecker();
+    cleanupNotifiedSessions();
+    console.log('✅ Mining checker service started');
+  })
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
 // Server listener

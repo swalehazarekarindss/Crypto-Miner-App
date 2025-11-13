@@ -29,6 +29,7 @@ try {
 import Svg, {Circle, Path, Defs, RadialGradient, Stop} from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {authAPI} from '../services/api';
+import NotificationService from '../services/NotifcationService';
 
 const {width, height} = Dimensions.get('window');
 
@@ -86,6 +87,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       fetchStatus(true);
     }, 300);
 
+    // Poll backend every 10 seconds to check if mining is complete
+    const statusCheckInterval = setInterval(() => {
+      console.log('HomeScreen: Periodic status check...');
+      fetchStatus(false);
+    }, 10000);
+
     // Add focus listener to refresh data when returning to screen
     // Don't auto-navigate when returning from other screens
     const unsubscribe = navigation.addListener('focus', () => {
@@ -95,6 +102,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
     return () => {
       clearTimeout(checkActiveSession);
+      clearInterval(statusCheckInterval);
       unsubscribe();
     };
   }, [navigation]);
@@ -125,27 +133,56 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       const { miningAPI } = await import('../services/api');
       const statusResp = await miningAPI.getStatus();
       if (statusResp && statusResp.session) {
-        console.log('HomeScreen: Mining session status:', statusResp.session.status);
-        setMiningSession(statusResp.session);
-        setMiningStatus(statusResp.session.status || 'idle');
+        const sess = statusResp.session;
+        console.log('HomeScreen: Mining session status:', sess.status);
+        setMiningSession(sess);
+        setMiningStatus(sess.status || 'idle');
+        
+        // Check if mining is complete (timer reached 0)
+        if (sess.status === 'mining') {
+          const start = new Date(sess.miningStartTime || sess.createdDate).getTime();
+          const now = Date.now();
+          const planned = (sess.selectedHour || 1) * 3600;
+          const elapsed = Math.floor((now - start) / 1000);
+          const remaining = Math.max(0, planned - elapsed);
+          const currentEarned = Math.min(elapsed, planned) * 0.01 * (sess.multiplier || 1);
+          
+          // If timer is complete, show notification
+          if (remaining === 0) {
+            console.log('⏰ HomeScreen: Mining complete detected!');
+            console.log('   - Earned:', currentEarned.toFixed(2), 'CMT');
+            
+            // Show notification
+            await NotificationService.showCustomNotification(
+              '⏰ Mining Complete!',
+              `Your rewards are ready! You earned ${currentEarned.toFixed(2)} CMT. Tap to claim now!`,
+              {
+                type: 'mining_complete',
+                screen: 'Mining',
+                sessionId: String(sess._id),
+              }
+            );
+            console.log('✅ Notification shown from HomeScreen');
+          }
+        }
         
         // Auto-navigate to MiningScreen if there's an active mining session
-        if (autoNavigate && statusResp.session.status === 'mining' && statusResp.session._id) {
+        if (autoNavigate && sess.status === 'mining' && sess._id) {
           console.log('✅ HomeScreen: Active mining session found!');
-          console.log('   - Session ID:', statusResp.session._id);
-          console.log('   - Session status:', statusResp.session.status);
-          console.log('   - Session start time:', statusResp.session.miningStartTime);
+          console.log('   - Session ID:', sess._id);
+          console.log('   - Session status:', sess.status);
+          console.log('   - Session start time:', sess.miningStartTime);
           console.log('   - Navigating to MiningScreen...');
           // Use setTimeout to ensure navigation happens after render
           setTimeout(() => {
             console.log('🚀 HomeScreen: Executing navigation to Mining screen');
-            navigation.navigate('Mining', { sessionId: statusResp.session._id });
+            navigation.navigate('Mining', { sessionId: sess._id });
           }, 200);
         } else if (autoNavigate) {
           console.log('ℹ️ HomeScreen: No active mining session found');
-          console.log('   - Session exists:', !!statusResp.session);
-          console.log('   - Session status:', statusResp.session?.status);
-          console.log('   - Session ID:', statusResp.session?._id);
+          console.log('   - Session exists:', !!sess);
+          console.log('   - Session status:', sess?.status);
+          console.log('   - Session ID:', sess?._id);
         }
       }
     } catch (err) {
@@ -202,6 +239,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         setMiningSession(resp.session);
         setMiningStatus('mining');
         console.log('Navigating to Mining screen with sessionId:', resp.session._id);
+        
+        // Schedule notification for when mining completes
+        const BASE_RATE = 0.01;
+        const expectedEarned = hours * 3600 * BASE_RATE * (resp.session.multiplier || 1);
+        const miningStartTime = new Date(resp.session.miningStartTime || resp.session.createdDate);
+        
+        console.log('📅 Scheduling notification for mining completion');
+        await NotificationService.scheduleMiningCompleteNotification(
+          miningStartTime,
+          hours,
+          expectedEarned,
+          resp.session._id
+        );
+        
         navigation.navigate('Mining', { sessionId: resp.session._id });
       } else {
         console.error('Invalid response from startMining:', resp);
