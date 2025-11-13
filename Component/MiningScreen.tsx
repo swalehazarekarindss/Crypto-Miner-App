@@ -4,6 +4,7 @@ import { RewardedAd, RewardedAdEventType, AdEventType, TestIds } from 'react-nat
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Circle, Path, Defs, RadialGradient, Stop} from 'react-native-svg';
 import {miningAPI} from '../services/api';
+import NotificationService from '../services/NotifcationService';
 
 const {width, height} = Dimensions.get('window');
 
@@ -34,7 +35,7 @@ interface Props {
 }
 
 const BASE_RATE = 0.01;
-const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-7618137451217129/6689745040';
+const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-1084981696075055/2480721504';
 
 const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   const sessionId = route?.params?.sessionId;
@@ -45,6 +46,13 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   const [paused, setPaused] = useState(false);
   const [adShowing, setAdShowing] = useState(false);
   const intervalRef = useRef<any>(null);
+  const isFirstLoadRef = useRef<boolean>(true);
+  const hasShownNotificationRef = useRef<boolean>(false); // Track if notification was shown
+  
+  // Animation refs
+  const claimButtonScale = useRef(new Animated.Value(1)).current;
+  const claimButtonGlow = useRef(new Animated.Value(0)).current;
+  const earnedScale = useRef(new Animated.Value(1)).current;
   const rewardedRef = useRef(
     RewardedAd.createForAdRequest(adUnitId, { keywords: ['gaming','rewards'] })
   );
@@ -57,7 +65,7 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   // Halo animation
   const haloAnim = useRef(new Animated.Value(0)).current;
 
-  // Multiplier button animations (scale + glow)
+  // Multiplier button animations
   const multiplierAnims = useRef(
     Array.from({length: 6}, () => ({
       scale: new Animated.Value(1),
@@ -66,7 +74,7 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     }))
   ).current;
 
-  // Particle animations for active multiplier
+  // Particle animations
   const particleAnims = useRef(
     Array.from({length: 8}, () => ({
       opacity: new Animated.Value(0),
@@ -78,9 +86,6 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   // Progress bar shimmer
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
-  // Earned counter animation
-  const earnedScale = useRef(new Animated.Value(1)).current;
-
   useEffect(() => {
     if (!sessionId) {
       Alert.alert('No session', 'No mining session specified', [{text: 'OK', onPress: () => navigation.goBack()}]);
@@ -91,12 +96,101 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     startHaloAnimation();
     startShimmerAnimation();
 
+    // Poll backend every 10 seconds to sync data
+    const syncInterval = setInterval(() => {
+      syncWithBackend();
+    }, 10000);
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      clearInterval(syncInterval);
     };
   }, [sessionId]);
 
-  // Animate earned counter on update
+  // Animate claim button and show notification when timer ends
+  useEffect(() => {
+    if (secondsLeft === 0 && session && session.status !== 'claimed') {
+      startClaimButtonAnimation();
+      // Show notification immediately when button appears
+      showRewardReadyNotification();
+    }
+  }, [secondsLeft, session?.status]);
+
+  // Show notification when rewards are ready
+  const showRewardReadyNotification = async () => {
+    console.log('⏰ Timer reached 0! Showing notification...');
+    try {
+      const notifId = await NotificationService.showCustomNotification(
+        '⏰ Mining Complete!',
+        `Your rewards are ready! You earned ${earned.toFixed(2)} CMT. Tap to claim now!`,
+        {
+          type: 'mining_complete',
+          screen: 'Mining',
+          sessionId: String(sessionId),
+        }
+      );
+      
+      if (notifId) {
+        console.log('✅ Reward ready notification shown:', notifId);
+      } else {
+        console.log('❌ Notification failed to show');
+      }
+    } catch (error) {
+      console.error('❌ Error showing notification:', error);
+    }
+  };
+
+  const startClaimButtonAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(claimButtonScale, {
+            toValue: 1.05,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(claimButtonGlow, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(claimButtonScale, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(claimButtonGlow, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    ).start();
+  };
+
+  const syncWithBackend = async () => {
+    try {
+      const resp = await miningAPI.getStatus();
+      if (resp && resp.session && resp.session._id === sessionId) {
+        setSession(resp.session);
+        
+        if (resp.session.status === 'claimed') {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          Alert.alert(
+            'Session Completed',
+            'This mining session has been claimed.',
+            [{text: 'OK', onPress: () => navigation.navigate('Home')}]
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing with backend:', err);
+    }
+  };
+
   useEffect(() => {
     Animated.sequence([
       Animated.timing(earnedScale, { toValue: 1.1, duration: 100, useNativeDriver: true }),
@@ -143,12 +237,10 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     ).start();
   };
 
-  // Animate multiplier button (pulse + glow + rotate)
   const animateMultiplierButton = (index: number, isActive: boolean) => {
     const anim = multiplierAnims[index];
     
     if (isActive) {
-      // Continuous pulse for active button
       Animated.loop(
         Animated.sequence([
           Animated.parallel([
@@ -163,10 +255,8 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
         ])
       ).start();
 
-      // Start particle animation
       startParticleAnimation();
     } else {
-      // Reset animation
       Animated.parallel([
         Animated.timing(anim.scale, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.timing(anim.glow, { toValue: 0, duration: 300, useNativeDriver: true }),
@@ -175,7 +265,6 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
-  // Particle burst animation
   const startParticleAnimation = () => {
     const animations = particleAnims.map((particle, i) => {
       const angle = (i / particleAnims.length) * Math.PI * 2;
@@ -235,10 +324,15 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   const loadSession = async () => {
     try {
       const resp = await miningAPI.getStatus();
+      console.log('MiningScreen: Session data from backend:', resp?.session);
+      
       if (resp && resp.session && resp.session._id === sessionId) {
+        console.log('MiningScreen: Session status:', resp.session.status);
+        console.log('MiningScreen: Session totalEarned:', resp.session.totalEarned);
         setSession(resp.session);
         startLocalTimer(resp.session);
       } else if (resp && resp.session && resp.session._id !== sessionId) {
+        console.log('MiningScreen: Different session found, using it anyway');
         setSession(resp.session);
         startLocalTimer(resp.session);
       } else {
@@ -250,22 +344,150 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   };
 
   const startLocalTimer = (sess: any) => {
-    const start = new Date(sess.miningStartTime || sess.createdDate).getTime();
     const planned = (sess.selectedHour || 1) * 3600;
+    
+    if (sess.status === 'claimed' && sess.totalEarned !== undefined) {
+      setSecondsLeft(0);
+      setEarned(sess.totalEarned);
+      console.log('MiningScreen: Session already claimed, showing final earned:', sess.totalEarned);
+      return;
+    }
+
+    const start = new Date(sess.miningStartTime || sess.createdDate).getTime();
     const now = Date.now();
     const elapsed = Math.floor((now - start) / 1000);
-    const left = Math.max(0, planned - elapsed);
-    setSecondsLeft(left);
-
-    const initialEarned = Math.min(elapsed, planned) * BASE_RATE * (sess.multiplier || 1);
-    setEarned(initialEarned);
+    const remaining = Math.max(0, planned - elapsed);
+    
+    const isFreshSession = elapsed < 10 && isFirstLoadRef.current;
+    
+    if (isFreshSession) {
+      setSecondsLeft(planned);
+      setEarned(0);
+      console.log('MiningScreen: Fresh session - starting from', planned, 'seconds');
+    } else {
+      const initialEarned = Math.min(elapsed, planned) * BASE_RATE * (sess.multiplier || 1);
+      setSecondsLeft(remaining);
+      setEarned(initialEarned);
+      console.log('MiningScreen: Resumed session - remaining:', remaining, 'earned:', initialEarned.toFixed(2));
+    }
+    
+    isFirstLoadRef.current = false;
 
     if (intervalRef.current) clearInterval(intervalRef.current);
+    
     if (!paused) {
       intervalRef.current = setInterval(() => {
-        setSecondsLeft(prev => Math.max(0, prev - 1));
+        setSecondsLeft(prev => {
+          const newLeft = Math.max(0, prev - 1);
+          // Stop timer when it reaches 0
+          // Notification will be shown by useEffect watching secondsLeft
+          if (newLeft === 0 && prev > 0) {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+          }
+          return newLeft;
+        });
         setEarned(prev => prev + BASE_RATE * (sess.multiplier || 1));
       }, 1000);
+    }
+  };
+
+  // Called when timer reaches 0 - show notification
+  const handleTimerEnd = async () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    
+    // Prevent showing notification multiple times
+    if (hasShownNotificationRef.current) {
+      console.log('⚠️ Notification already shown, skipping');
+      return;
+    }
+    
+    hasShownNotificationRef.current = true;
+    
+    console.log('⏰ MiningScreen: Timer ended! Rewards ready to claim');
+    console.log('   - Earned amount:', earned.toFixed(2), 'CMT');
+    
+    try {
+      // Show notification that rewards are ready
+      const notifId = await NotificationService.showCustomNotification(
+        '⏰ Mining Complete!',
+        `Your rewards are ready! You earned ${earned.toFixed(2)} CMT. Tap to claim now!`,
+        {
+          type: 'mining_complete',
+          screen: 'Mining', // Navigate back to Mining screen
+          sessionId: String(sessionId),
+        }
+      );
+      
+      if (notifId) {
+        console.log('✅ Mining complete notification shown:', notifId);
+      } else {
+        console.log('❌ Notification failed to show');
+      }
+    } catch (error) {
+      console.error('❌ Error showing notification:', error);
+    }
+  };
+
+  // Called when user clicks "Claim Rewards" button
+  const handleClaimRewards = async () => {
+    try {
+      console.log('🎁 MiningScreen: User clicked claim button');
+      console.log('   - Current earned (frontend):', earned.toFixed(2));
+      
+      // Call backend to claim the session
+      const resp = await miningAPI.claimSession(sessionId);
+      console.log('   - Claim response from backend:', resp);
+      
+      if (resp && resp.earned !== undefined && resp.session) {
+        const earnedAmount = Number(resp.earned).toFixed(2);
+        const totalBalance = Number(resp.user?.balance || 0).toFixed(2);
+        
+        console.log('✅ Claim successful!');
+        console.log('   - Backend earned:', earnedAmount, 'CMT');
+        console.log('   - New total balance:', totalBalance, 'CMT');
+        
+        // Update local state
+        setEarned(resp.earned);
+        setSession(resp.session);
+        
+        // Show success notification
+        try {
+          const notifId = await NotificationService.showCustomNotification(
+            '🎉 Reward Claimed Successfully!',
+            `You've earned ${earnedAmount} CMT! Total Balance: ${totalBalance} CMT`,
+            {
+              type: 'reward_claimed',
+              screen: 'Home',
+              refresh: 'true',
+              earnedAmount: String(earnedAmount),
+              totalBalance: String(totalBalance),
+            }
+          );
+          
+          if (notifId) {
+            console.log('✅ Claim notification shown:', notifId);
+          }
+        } catch (notifError) {
+          console.error('❌ Error showing claim notification:', notifError);
+        }
+        
+        // Show success popup
+        Alert.alert(
+          '🎉 Congratulations!',
+          `You claimed ${earnedAmount} CMT!\n\nTotal Balance: ${totalBalance} CMT`,
+          [
+            {
+              text: 'Awesome!',
+              onPress: () => {
+                navigation.navigate('Home', { refresh: true });
+              },
+            },
+          ]
+        );
+      }
+    } catch (err) {
+      console.error('❌ Error claiming session:', err);
+      Alert.alert('Error', 'Failed to claim rewards. Please try again.');
     }
   };
 
@@ -337,7 +559,7 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
       Alert.alert('Ad Error', 'Could not load ad. Please try again.');
     });
     rewarded.load();
-    const unsubLoad = rewarded.addAdEventListener(AdEventType.LOADED, () => {
+    const unsubLoad = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
       rewarded.show();
     });
   };
@@ -401,21 +623,52 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     outputRange: [-width, width],
   });
 
+  const showClaimButton = secondsLeft === 0 && session && session.status !== 'claimed';
+
   return (
     <LinearGradient colors={['#749BC2', '#4682A9', '#91C8E4', '#98A1BC']} style={styles.container} start={{x: 0, y: 0}} end={{x: 1, y: 1}}>
       <BackgroundSVG />
       <View style={styles.inner}>
-          <View style={styles.headerRow}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              disabled={session?.status !== 'claimed'}
+              style={[
+                styles.backButton,
+                session?.status !== 'claimed' && styles.backButtonDisabled
+              ]}>
+              <Text style={[
+                styles.backButtonText,
+                session?.status !== 'claimed' && styles.backButtonTextDisabled
+              ]}>←</Text>
+            </TouchableOpacity>
             <Text style={styles.title}>⛏️ Mining</Text>
-            <View style={styles.statusBadge}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>{paused || adShowing ? 'Paused' : 'Active'}</Text>
-            </View>
           </View>
+          <View style={[
+            styles.statusBadge,
+            session?.status === 'claimed' && styles.statusBadgeClaimed
+          ]}>
+            <View style={[
+              styles.statusDot,
+              session?.status === 'claimed' && styles.statusDotClaimed
+            ]} />
+            <Text style={[
+              styles.statusText,
+              session?.status === 'claimed' && styles.statusTextClaimed
+            ]}>
+              {session?.status === 'claimed' ? 'Claimed' : (paused || adShowing ? 'Paused' : 'Active')}
+            </Text>
+          </View>
+        </View>
 
         <Animated.View style={[styles.box, {transform: [{scale: earnedScale}]}]}>
           <Text style={styles.boxLabel}>💰 Total Earned</Text>
-          <Text style={styles.boxValue}>{earned.toFixed(2)} CMT</Text>
+          <Text style={styles.boxValue}>
+            {session?.status === 'claimed' && session?.totalEarned !== undefined
+              ? Number(session.totalEarned).toFixed(2)
+              : earned.toFixed(2)} CMT
+          </Text>
           <View style={styles.boxGlow} />
         </Animated.View>
 
@@ -460,6 +713,38 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
           <Text style={styles.multLabel}>⚡ Multiplier</Text>
           <Text style={styles.multValue}>{session?.multiplier || 1}x</Text>
         </View>
+
+        {/* CLAIM REWARDS BUTTON - Show when timer reaches 0 */}
+        {showClaimButton && (
+          <Animated.View 
+            style={[
+              styles.claimButtonContainer,
+              {
+                transform: [{scale: claimButtonScale}],
+              }
+            ]}>
+            <TouchableOpacity
+              onPress={handleClaimRewards}
+              activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                style={styles.claimButton}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 0}}>
+                <Animated.View 
+                  style={[
+                    styles.claimButtonGlow,
+                    {
+                      opacity: claimButtonGlow,
+                    }
+                  ]}
+                />
+                <Text style={styles.claimButtonText}>🎁 Claim Rewards</Text>
+                <Text style={styles.claimButtonSubtext}>Tap to claim {earned.toFixed(2)} CMT</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
         <View style={styles.svgContainer}>
           {starPositions.map((pos, i) => (
@@ -606,6 +891,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  backButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  backButtonTextDisabled: {
+    color: 'rgba(255, 255, 255, 0.3)',
+  },
   title: { color: '#fff', fontSize: 28, fontWeight: '700' },
   statusBadge: {
     flexDirection: 'row',
@@ -628,6 +940,16 @@ const styles = StyleSheet.create({
     color: '#10b981',
     fontSize: 12,
     fontWeight: '600',
+  },
+  statusBadgeClaimed: {
+    backgroundColor: 'rgba(251, 191, 36, 0.2)',
+    borderColor: 'rgba(251, 191, 36, 0.4)',
+  },
+  statusDotClaimed: {
+    backgroundColor: '#fbbf24',
+  },
+  statusTextClaimed: {
+    color: '#fbbf24',
   },
   box: {
     backgroundColor: '#0f2950',
@@ -715,6 +1037,46 @@ const styles = StyleSheet.create({
   },
   multLabel: { color: '#9fb7da', fontWeight: '600' },
   multValue: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  claimButtonContainer: {
+    marginBottom: 16,
+  },
+  claimButton: {
+    height: 70,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 12,
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    overflow: 'hidden',
+  },
+  claimButtonGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    borderRadius: 16,
+  },
+  claimButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: {width: 0, height: 2},
+    textShadowRadius: 4,
+  },
+  claimButtonSubtext: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
+    fontWeight: '600',
+  },
   svgContainer: {
     width: width - 40,
     height: 350,

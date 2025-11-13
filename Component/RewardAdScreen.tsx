@@ -8,7 +8,7 @@ import {
 
 const adUnitId = __DEV__
   ? TestIds.REWARDED
-  : 'ca-app-pub-7618137451217129/6689745040'; // Replace with your real ad unit ID
+  : 'ca-app-pub-1084981696075055/2480721504'; // Replace with your real ad unit ID
 
 const rewarded = RewardedAd.createForAdRequest(adUnitId, {
   keywords: ['gaming', 'rewards'],

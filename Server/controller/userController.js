@@ -140,6 +140,7 @@ exports.startMining = async (req, res) => {
     });
 
     await session.save();
+    console.log(`✅ New mining session created: ID=${session._id}, Duration=${selectedHour}hrs`);
 
     // update user snapshot
     user.miningStatus = 'mining';
@@ -211,30 +212,50 @@ exports.claimSession = async (req, res) => {
     const session = await MiningSession.findById(sessionId);
     if (!session) return res.status(404).json({ message: 'Session not found.' });
 
-    // compute earned tokens based on elapsed time, base rate and multiplier
+    // compute earned tokens based on full planned duration
+    // When user claims, they should get rewards for the full duration they selected
     const BASE_RATE = 0.01; // tokens per second
-    const now = new Date();
-    const start = session.miningStartTime || session.createdDate;
-    const elapsedSec = Math.max(0, Math.floor((now - start) / 1000));
     const totalSecondsPlanned = (session.selectedHour || 1) * 3600;
-    const effectiveSeconds = Math.min(elapsedSec, totalSecondsPlanned);
+    
+    // Calculate earned for the full planned duration
+    const earned = totalSecondsPlanned * BASE_RATE * (session.multiplier || 1);
+    
+    console.log(`✅ Claiming session: ${session.selectedHour}hrs, multiplier: ${session.multiplier}x, earned: ${earned.toFixed(2)} CMT`);
 
-    const earned = effectiveSeconds * BASE_RATE * (session.multiplier || 1);
+    // Create a NEW document for the claimed session
+    const claimedSession = new MiningSession({
+      walletId: session.walletId,
+      multiplier: session.multiplier,
+      status: 'claimed',
+      miningStartTime: session.miningStartTime,
+      currentMultiplierStartTime: session.currentMultiplierStartTime,
+      selectedHour: session.selectedHour,
+      totalEarned: earned,
+      lastUpdated: new Date(),
+    });
+    
+    await claimedSession.save();
+    console.log(`✅ New claimed session created: ID=${claimedSession._id}, Earned=${earned.toFixed(2)} CMT`);
+    console.log(`📝 Mining document kept: ID=${sessionId} (status: mining, totalEarned: 0)`);
 
-    session.totalEarned = earned;
-    session.status = 'claimed';
-    session.lastUpdated = new Date();
-    await session.save();
-
-    // credit user balance
+    // credit user balance and reset mining status to idle
     const user = await User.findOne({ walletId: session.walletId });
     if (user) {
       user.balance = (user.balance || 0) + earned;
-      user.miningStatus = 'claimed';
+      user.miningStatus = 'idle'; // Reset to idle so user can start new session
+      user.multiplier = 1; // Reset multiplier for next session
       await user.save();
     }
 
-    res.status(200).json({ message: 'Claimed', earned, session });
+    res.status(200).json({ 
+      message: 'Claimed', 
+      earned, 
+      session: claimedSession, // Return the new claimed session
+      user: {
+        balance: user ? user.balance : 0,
+        walletId: user ? user.walletId : session.walletId
+      }
+    });
   } catch (err) {
     console.error('❌ claimSession error:', err);
     res.status(500).json({ message: 'Server error.' });

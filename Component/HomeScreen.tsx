@@ -65,9 +65,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   const [showDurationModal, setShowDurationModal] = useState(false);
   const [selectedHours, setSelectedHours] = useState<number | null>(1);
   const [animatedVisible, setAnimatedVisible] = useState(false);
-  const slideAnim = React.useRef(new Animated.Value(300)).current;
+  const slideAnim = React.useRef(new Animated.Value(0.8)).current;
   const backdropOpacity = React.useRef(new Animated.Value(0)).current;
   const [userMultiplier, setUserMultiplier] = useState<number>(1);
+  const [checkingSession, setCheckingSession] = useState(true);
   const BASE_RATE = 0.01; // tokens per second
 
   useEffect(() => {
@@ -76,9 +77,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       (Icon as any).loadFont();
     }
 
+    console.log('HomeScreen: Component mounted, checking for active session...');
     loadUserData();
-    fetchStatus();
-  }, []);
+    
+    // Delay to ensure navigation is ready, then check for active mining session
+    const checkActiveSession = setTimeout(() => {
+      console.log('HomeScreen: Fetching status with auto-navigate enabled');
+      fetchStatus(true);
+    }, 300);
+
+    // Add focus listener to refresh data when returning to screen
+    // Don't auto-navigate when returning from other screens
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('HomeScreen: Screen focused, refreshing status');
+      fetchStatus(false);
+    });
+
+    return () => {
+      clearTimeout(checkActiveSession);
+      unsubscribe();
+    };
+  }, [navigation]);
 
   const loadUserData = async () => {
     try {
@@ -91,11 +110,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
     }
   };
 
-  const fetchStatus = async () => {
+  const fetchStatus = async (autoNavigate = false) => {
     try {
       const userResp = await authAPI.getUser();
       if (userResp) {
-        setTokens(String(Number(userResp.balance || 0).toFixed(2)));
+        const balance = Number(userResp.balance || 0).toFixed(2);
+        console.log('💰 HomeScreen: Updated balance from backend:', balance, 'CMT');
+        console.log('   - User mining status:', userResp.miningStatus);
+        setTokens(balance);
         setMiningStatus(userResp.miningStatus || 'idle');
         setUserMultiplier(userResp.multiplier || 1);
       }
@@ -103,11 +125,35 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       const { miningAPI } = await import('../services/api');
       const statusResp = await miningAPI.getStatus();
       if (statusResp && statusResp.session) {
+        console.log('HomeScreen: Mining session status:', statusResp.session.status);
         setMiningSession(statusResp.session);
         setMiningStatus(statusResp.session.status || 'idle');
+        
+        // Auto-navigate to MiningScreen if there's an active mining session
+        if (autoNavigate && statusResp.session.status === 'mining' && statusResp.session._id) {
+          console.log('✅ HomeScreen: Active mining session found!');
+          console.log('   - Session ID:', statusResp.session._id);
+          console.log('   - Session status:', statusResp.session.status);
+          console.log('   - Session start time:', statusResp.session.miningStartTime);
+          console.log('   - Navigating to MiningScreen...');
+          // Use setTimeout to ensure navigation happens after render
+          setTimeout(() => {
+            console.log('🚀 HomeScreen: Executing navigation to Mining screen');
+            navigation.navigate('Mining', { sessionId: statusResp.session._id });
+          }, 200);
+        } else if (autoNavigate) {
+          console.log('ℹ️ HomeScreen: No active mining session found');
+          console.log('   - Session exists:', !!statusResp.session);
+          console.log('   - Session status:', statusResp.session?.status);
+          console.log('   - Session ID:', statusResp.session?._id);
+        }
       }
     } catch (err) {
       console.error('Error fetching status:', err);
+    } finally {
+      if (autoNavigate) {
+        setCheckingSession(false);
+      }
     }
   };
 
@@ -132,26 +178,34 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
       return;
     }
 
-    // open our animated duration panel
+    // open our animated duration panel (centered)
     setSelectedHours(1);
     setShowDurationModal(true);
     setAnimatedVisible(true);
-    // animate backdrop fade and panel slide up
+    // animate backdrop fade and scale in
+    slideAnim.setValue(0.8);
     backdropOpacity.setValue(0);
     Animated.parallel([
       Animated.timing(backdropOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 350, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
     ]).start();
   };
 
   const startMiningWithHours = async (hours: number) => {
     try {
       const { miningAPI } = await import('../services/api');
+      console.log('Starting mining with hours:', hours);
       const resp = await miningAPI.startMining(hours);
-      if (resp && resp.session) {
+      console.log('Mining start response:', resp);
+      
+      if (resp && resp.session && resp.session._id) {
         setMiningSession(resp.session);
         setMiningStatus('mining');
+        console.log('Navigating to Mining screen with sessionId:', resp.session._id);
         navigation.navigate('Mining', { sessionId: resp.session._id });
+      } else {
+        console.error('Invalid response from startMining:', resp);
+        Alert.alert('Error', 'Failed to start mining session. Invalid response from server.');
       }
     } catch (err) {
       console.error('Error starting mining:', err);
@@ -162,10 +216,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
 
   const handleModalNext = async () => {
     const hours = selectedHours || 1;
-    // animate down then start (fade backdrop too)
+    // animate out then start
     Animated.parallel([
       Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 300, duration: 250, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0.8, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setShowDurationModal(false);
       setAnimatedVisible(false);
@@ -174,10 +228,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   };
 
   const handleModalBack = () => {
-    // animate down and close (fade backdrop)
+    // animate out and close
     Animated.parallel([
       Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 300, duration: 250, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0.8, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setShowDurationModal(false);
       setAnimatedVisible(false);
@@ -185,11 +239,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
   };
 
   return (
-    <LinearGradient
-      colors={['#749BC2', '#98A1BC', '#91C8E4', '#749BC2']}
-      style={styles.container}
-      start={{x: 0, y: 0}}
-      end={{x: 1, y: 1}}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#749BC2', '#98A1BC', '#91C8E4', '#749BC2']}
+        style={StyleSheet.absoluteFill}
+        start={{x: 0, y: 0}}
+        end={{x: 1, y: 1}}
+      />
       <StatusBar barStyle="light-content" backgroundColor="#749BC2" />
       
       <BackgroundSVG />
@@ -256,94 +312,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Animated Duration Selection Panel (slide-up) */}
-        {animatedVisible && (
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={handleModalBack}>
-              <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
-            </TouchableWithoutFeedback>
-
-            <Animated.View
-              style={[
-                styles.modalCard,
-                { transform: [{ translateY: slideAnim }] },
-              ]}>
-              <LinearGradient
-                colors={['#ffffff', '#f8fafc']}
-                style={[styles.modalGradient, { marginTop: 12 }]}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 1}}>
-                
-                <Text style={[styles.modalTitle, { color: '#0f2b4a' }]}>Select Duration</Text>
-                <Text style={[styles.modalSub, { color: '#475569' }]}>Choose how long you want to mine</Text>
-
-                {/* Estimated tokens preview */}
-                <View style={styles.estimateRow}>
-                  <Text style={styles.estimateLabel}>Estimated rewards</Text>
-                  <Text style={styles.estimateValue}>{(() => {
-                    const hrs = selectedHours || 1;
-                    const estimate = hrs * 3600 * BASE_RATE * (userMultiplier || 1);
-                    return `${Number(estimate).toFixed(2)} CMT`;
-                  })()}</Text>
-                </View>
-
-                <View style={styles.durationRow}>
-                  {[
-                    { hr: 1, icon: 'timer-sand' },
-                    { hr: 2, icon: 'clock-time-two-outline' },
-                    { hr: 4, icon: 'clock-time-four-outline' },
-                    { hr: 12, icon: 'clock-time-twelve-outline' },
-                    { hr: 18, icon: 'clock-alert-outline' },
-                    { hr: 24, icon: 'hours-24' },
-                  ].map(item => {
-                    const active = selectedHours === item.hr;
-                    return (
-                      <TouchableOpacity
-                        key={item.hr}
-                        activeOpacity={0.9}
-                        style={[
-                          styles.hourBtn,
-                          active && styles.hourBtnActive,
-                        ]}
-                        onPress={() => setSelectedHours(item.hr)}>
-                        <View style={[styles.watchIconContainer, active && styles.watchIconContainerActive]}>
-                          <ClockIcon size={14} color={active ? '#234C6A' : '#64748b'} />
-                        </View>
-
-                        <ClockIcon size={32} color={active ? '#234C6A' : '#0f172a'} />
-                        <Text style={[styles.hourBtnText, active && styles.hourBtnTextActive]}>{item.hr}h</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.modalBack} onPress={handleModalBack}>
-                    <LinearGradient
-                      colors={['#234C6A', '#BADFDB']}
-                      style={styles.modalBackGradient}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 0}}>
-                    <Text style={styles.modalBackText}>Back</Text>
-                    </LinearGradient>
-
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.modalNext} onPress={handleModalNext}>
-                    <LinearGradient
-                      colors={['#234C6A', '#BADFDB']}
-                      style={styles.modalNextGradient}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 0}}>
-                      <Text style={styles.modalNextText}>Next</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-            </Animated.View>
-          </View>
-        )}
-
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
@@ -377,7 +345,98 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
           </View>
         </View>
       </ScrollView>
-    </LinearGradient>
+
+      {/* Animated Duration Selection Panel (slide-up) - Outside ScrollView */}
+      {animatedVisible && (
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={handleModalBack}>
+            <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
+          </TouchableWithoutFeedback>
+
+          <Animated.View
+            style={[
+              styles.modalCard,
+              { 
+                transform: [{ scale: slideAnim }],
+                opacity: slideAnim,
+              },
+            ]}>
+            <LinearGradient
+              colors={['#ffffff', '#f8fafc']}
+              style={[styles.modalGradient, { marginTop: 12 }]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}>
+              
+              <Text style={[styles.modalTitle, { color: '#0f2b4a' }]}>Select Duration</Text>
+              <Text style={[styles.modalSub, { color: '#475569' }]}>Choose how long you want to mine</Text>
+
+              {/* Estimated tokens preview */}
+              <View style={styles.estimateRow}>
+                <Text style={styles.estimateLabel}>Estimated rewards</Text>
+                <Text style={styles.estimateValue}>{(() => {
+                  const hrs = selectedHours || 1;
+                  const estimate = hrs * 3600 * BASE_RATE * (userMultiplier || 1);
+                  return `${Number(estimate).toFixed(2)} CMT`;
+                })()}</Text>
+              </View>
+
+              <View style={styles.durationRow}>
+                {[
+                  { hr: 1, icon: 'timer-sand' },
+                  { hr: 2, icon: 'clock-time-two-outline' },
+                  { hr: 4, icon: 'clock-time-four-outline' },
+                  { hr: 12, icon: 'clock-time-twelve-outline' },
+                  { hr: 18, icon: 'clock-alert-outline' },
+                  { hr: 24, icon: 'hours-24' },
+                ].map(item => {
+                  const active = selectedHours === item.hr;
+                  return (
+                    <TouchableOpacity
+                      key={item.hr}
+                      activeOpacity={0.9}
+                      style={[
+                        styles.hourBtn,
+                        active && styles.hourBtnActive,
+                      ]}
+                      onPress={() => setSelectedHours(item.hr)}>
+                      <View style={[styles.watchIconContainer, active && styles.watchIconContainerActive]}>
+                        <ClockIcon size={14} color={active ? '#234C6A' : '#64748b'} />
+                      </View>
+
+                      <ClockIcon size={32} color={active ? '#234C6A' : '#0f172a'} />
+                      <Text style={[styles.hourBtnText, active && styles.hourBtnTextActive]}>{item.hr}h</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalBack} onPress={handleModalBack}>
+                  <LinearGradient
+                    colors={['#234C6A', '#BADFDB']}
+                    style={styles.modalBackGradient}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 0}}>
+                  <Text style={styles.modalBackText}>Back</Text>
+                  </LinearGradient>
+
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.modalNext} onPress={handleModalNext}>
+                  <LinearGradient
+                    colors={['#234C6A', '#BADFDB']}
+                    style={styles.modalNextGradient}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 0}}>
+                    <Text style={styles.modalNextText}>Next</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+      )}
+    </View>
   );
 };
 
@@ -487,27 +546,31 @@ const styles = StyleSheet.create({
   },
   /* Modal styles */
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    zIndex: 1000,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   modalCard: {
-    width: '100%',
-    maxWidth: 500,
+    width: width - 60,
+    maxWidth: 450,
     borderRadius: 20,
     overflow: 'hidden',
-    position: 'absolute',
-    bottom: 0,
-    left: 20,
-    right: 20,
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: -4},
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 20,

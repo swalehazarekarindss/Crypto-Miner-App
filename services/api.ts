@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.1.5:5000/api/user'; // For Android emulator
+const API_URL = 'http://192.168.1.80:5000/api/user'; // For Android emulator
 // const API_URL = 'http://localhost:5000/api/user'; // For iOS simulator
 // const API_URL = 'http://YOUR_LOCAL_IP:5000/api/user'; // For real device
 
