@@ -1,4 +1,4 @@
-import notifee, {
+/*import notifee, {
   AndroidImportance,
   EventType,
   Notification,
@@ -339,3 +339,308 @@ class NotificationService {
 }
 
 export default new NotificationService();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import notifee, { TimestampTrigger, TriggerType, AndroidImportance, EventType } from '@notifee/react-native';
+
+const CHANNEL_ID = 'mining-events';
+
+export async function ensureNotificationChannel() {
+  await notifee.requestPermission();
+  await notifee.createChannel({
+    id: CHANNEL_ID,
+    name: 'Mining Events',
+    importance: AndroidImportance.HIGH,
+  });
+}
+
+export async function scheduleEndNotification(endAt: number) {
+  await ensureNotificationChannel();
+  const trigger: TimestampTrigger = {
+    type: TriggerType.TIMESTAMP,
+    timestamp: endAt,
+    alarmManager: { allowWhileIdle: true },
+  };
+  await notifee.createTriggerNotification(
+    {
+      title: 'Timer ended',
+      body: 'Timer is end — please claim your reward',
+      android: {
+        channelId: CHANNEL_ID,
+        pressAction: { id: 'default' },
+      },
+    },
+    trigger,
+  );
+}
+
+export async function showImmediate(title: string, body: string, data?: Record<string, any>) {
+  await ensureNotificationChannel();
+  await notifee.displayNotification({
+    title,
+    body,
+    android: {
+      channelId: CHANNEL_ID,
+      pressAction: { id: 'default' },
+    },
+    data,
+  });
+}
+
+let _nav: any = null;
+
+export async function bindNavigation(navigation: any) {
+  _nav = navigation;
+  await ensureNotificationChannel();
+
+  notifee.onForegroundEvent(({ type, detail }) => {
+    if (type === EventType.PRESS && detail.notification?.data && _nav) {
+      const { screen, sessionId } = (detail.notification.data as any);
+      if (screen) {
+        _nav.navigate(screen, sessionId ? { sessionId } : undefined);
+      }
+    }
+  });
+
+  const initial = await notifee.getInitialNotification();
+  if (initial?.notification?.data && _nav) {
+    const { screen, sessionId } = (initial.notification.data as any);
+    if (screen) {
+      // small delay to allow navigator to mount
+      setTimeout(() => {
+        _nav.navigate(screen, sessionId ? { sessionId } : undefined);
+      }, 500);
+    }
+  }
+}
+
+*/
+
+
+
+
+import notifee, { 
+  AndroidImportance, 
+  TriggerType,
+  TimestampTrigger,
+  AuthorizationStatus 
+} from '@notifee/react-native';
+import { Platform } from 'react-native';
+
+class NotificationService {
+  private channelId = 'mining-rewards';
+  private initialized = false;
+
+  async initialize() {
+    if (this.initialized) {
+      console.log('ℹ️ Notification service already initialized');
+      return true;
+    }
+
+    try {
+      // Request permissions
+      const settings = await notifee.requestPermission();
+      
+      console.log('📋 Notification permission status:', settings.authorizationStatus);
+      
+      if (settings.authorizationStatus === AuthorizationStatus.DENIED) {
+        console.warn('⚠️ Notification permissions denied');
+        return false;
+      }
+
+      // Create notification channel (Android)
+      if (Platform.OS === 'android') {
+        await notifee.createChannel({
+          id: this.channelId,
+          name: 'Mining Rewards',
+          description: 'Notifications for mining completion and rewards',
+          importance: AndroidImportance.HIGH,
+          sound: 'default',
+          vibration: true,
+          lights: true,
+          lightColor: '#10b981',
+          badge: true,
+        });
+        console.log('✅ Android notification channel created');
+      }
+
+      this.initialized = true;
+      console.log('✅ Notification service initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to initialize notification service:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Schedule notification to fire at exact timestamp (works in background)
+   */
+  async scheduleEndNotification(endTimestamp: number, earnedAmount: number, sessionId: string) {
+    try {
+      await this.initialize();
+
+      const trigger: TimestampTrigger = {
+        type: TriggerType.TIMESTAMP,
+        timestamp: endTimestamp,
+        alarmManager: {
+          allowWhileIdle: true, // Critical for background delivery
+        },
+      };
+
+      const notificationId = await notifee.createTriggerNotification(
+        {
+          id: `mining-complete-${sessionId}`,
+          title: '⏰ Mining Complete!',
+          body: `Your rewards are ready! You earned ${earnedAmount.toFixed(2)} CMT. Tap to claim now!`,
+          android: {
+            channelId: this.channelId,
+            importance: AndroidImportance.HIGH,
+            pressAction: {
+              id: 'default',
+              launchActivity: 'default',
+            },
+            sound: 'default',
+            vibrationPattern: [300, 500, 300],
+            lightUpScreen: true,
+            category: 'alarm',
+            autoCancel: true,
+            data: {
+              type: 'mining_complete',
+              sessionId: String(sessionId),
+              screen: 'Mining',
+            },
+          },
+          ios: {
+            sound: 'default',
+            categoryId: 'mining',
+            interruptionLevel: 'timeSensitive', // iOS 15+ for time-sensitive notifications
+          },
+          data: {
+            type: 'mining_complete',
+            sessionId: String(sessionId),
+            screen: 'Mining',
+          },
+        },
+        trigger
+      );
+
+      console.log('✅ Scheduled notification:', notificationId, 'at', new Date(endTimestamp).toLocaleString());
+      return notificationId;
+    } catch (error) {
+      console.error('❌ Error scheduling notification:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Show immediate notification (for claiming rewards)
+   */
+  async showImmediate(title: string, body: string, data?: any) {
+    try {
+      await this.initialize();
+
+      const notificationId = await notifee.displayNotification({
+        title,
+        body,
+        android: {
+          channelId: this.channelId,
+          importance: AndroidImportance.HIGH,
+          pressAction: {
+            id: 'default',
+          },
+          sound: 'default',
+        },
+        ios: {
+          sound: 'default',
+        },
+        data: data || {},
+      });
+
+      console.log('✅ Immediate notification shown:', notificationId);
+      return notificationId;
+    } catch (error) {
+      console.error('❌ Error showing notification:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Cancel scheduled notification for a session
+   */
+  async cancelScheduledNotification(sessionId: string) {
+    try {
+      const notificationId = `mining-complete-${sessionId}`;
+      await notifee.cancelNotification(notificationId);
+      console.log('✅ Cancelled notification:', notificationId);
+    } catch (error) {
+      console.error('❌ Error cancelling notification:', error);
+    }
+  }
+
+  /**
+   * Get all scheduled notifications (for debugging)
+   */
+  async getScheduledNotifications() {
+    try {
+      const notifications = await notifee.getTriggerNotifications();
+      console.log('📋 Scheduled notifications:', notifications);
+      return notifications;
+    } catch (error) {
+      console.error('❌ Error getting notifications:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Cancel all notifications
+   */
+  async cancelAllNotifications() {
+    try {
+      await notifee.cancelAllNotifications();
+      console.log('✅ All notifications cancelled');
+    } catch (error) {
+      console.error('❌ Error cancelling all notifications:', error);
+    }
+  }
+}
+
+export default new NotificationService();
+
+// Named exports for convenience
+export const {
+  scheduleEndNotification,
+  showImmediate,
+  cancelScheduledNotification,
+  getScheduledNotifications,
+  cancelAllNotifications,
+} = new NotificationService();

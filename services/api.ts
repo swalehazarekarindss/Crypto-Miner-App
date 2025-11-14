@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.1.80:5000/api/user'; // For Android emulator
+const API_URL = 'http://192.168.1.53:5000/api/user'; // For Android emulator
 // const API_URL = 'http://localhost:5000/api/user'; // For iOS simulator
 // const API_URL = 'http://YOUR_LOCAL_IP:5000/api/user'; // For real device
 
@@ -42,8 +42,8 @@ export const authAPI = {
 
   login: async (walletId: string, password: string) => {
     try {
-      console.log('Attempting login:', {walletId, password: '***'});
-      const response = await api.post('/login', {walletId, /*password*/});
+      console.log('Attempting login:', {walletId, /*password: '***'*/});
+      const response = await api.post('/login', {walletId});
       console.log('Login response:', response.data);
       if (response.data.token) {
         await AsyncStorage.setItem('token', response.data.token);
@@ -59,6 +59,10 @@ export const authAPI = {
 
   getUser: async () => {
     const response = await api.get('/me');
+    return response.data;
+  },
+  getLeaderboard: async () => {
+    const response = await api.get('/leaderboard');
     return response.data;
   },
 
