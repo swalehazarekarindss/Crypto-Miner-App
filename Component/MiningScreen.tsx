@@ -1261,13 +1261,6 @@ const styles = StyleSheet.create({
 export default MiningScreen;
 
 */
-
-
-
-
-
-
-
 import React, {useEffect, useState, useRef, useMemo} from 'react';
 import {StyleSheet, Dimensions, View, Text, TouchableOpacity, Alert, ActivityIndicator, Animated} from 'react-native';
 import { RewardedAd, RewardedAdEventType, AdEventType, TestIds } from 'react-native-google-mobile-ads';
@@ -1305,7 +1298,8 @@ interface Props {
 }
 
 const BASE_RATE = 0.01;
-const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-7618137451217129/6689745040';
+//const adUnitId = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-7618137451217129/6689745040';
+const adUnitId = TestIds.REWARDED;
 
 const MiningScreen: React.FC<Props> = ({navigation, route}) => {
   const sessionId = route?.params?.sessionId;
@@ -1632,6 +1626,25 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
+  const testNotification = async () => {
+    try {
+      const testTime = Date.now() + 10000;
+      const testAmount = 5.50;
+      const testSessionId = 'test-' + Date.now();
+      
+      await scheduleEndNotification(testTime, testAmount, testSessionId);
+      
+      Alert.alert(
+        '🧪 Test Scheduled',
+        'Notification in 10 seconds.\n\nClose app now to test!',
+        [{ text: 'OK' }]
+      );
+    } catch (err) {
+      console.error('❌ Test error:', err);
+      Alert.alert('Error', 'Test failed');
+    }
+  };
+
   const pauseMining = () => {
     setPaused(true);
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -1642,6 +1655,12 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     const s = sess || session;
     if (s) startLocalTimer(s);
   };
+
+
+
+
+
+  /*
 
   const setMultiplier = async (target: number) => {
     if (!session) return;
@@ -1704,6 +1723,115 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
       rewarded.show();
     });
   };
+
+
+
+
+
+
+
+
+
+
+
+*/
+
+
+
+
+
+
+
+const setMultiplier = async (target: number) => {
+  if (!session) return;
+
+  if (session.multiplier >= target) {
+    setSession((s: any) => ({ ...s, multiplier: Math.min(target, s.multiplier) }));
+    return;
+  }
+
+  setUpgrading(true);
+  pauseMining();
+  setAdShowing(true);
+
+  const rewarded = rewardedRef.current;
+  let rewardEarned = false;
+
+  // When reward is earned
+  const unsubReward = rewarded.addAdEventListener(
+    RewardedAdEventType.EARNED_REWARD,
+    () => {
+      rewardEarned = true;
+    }
+  );
+
+  // When load fails → MUST use AdEventType.ERROR in v16
+  const unsubError = rewarded.addAdEventListener(
+    AdEventType.ERROR,
+    () => {
+      setAdShowing(false);
+      setUpgrading(false);
+
+      unsubReward();
+      unsubClosed();
+      unsubLoad();
+
+      resumeMining();
+      Alert.alert("Ad Error", "Could not load ad. Please try again.");
+    }
+  );
+
+  // When loaded → show
+  const unsubLoad = rewarded.addAdEventListener(
+    RewardedAdEventType.LOADED,
+    () => {
+      rewarded.show();
+    }
+  );
+
+  // When closed → MUST use AdEventType.CLOSED in v16
+  const unsubClosed = rewarded.addAdEventListener(
+    AdEventType.CLOSED,
+    async () => {
+      setAdShowing(false);
+
+      try {
+        if (rewardEarned) {
+          let current = session.multiplier || 1;
+
+          while (current < target && current < 6) {
+            const resp = await miningAPI.upgradeMultiplier(session._id);
+            if (resp?.session) {
+              setSession(resp.session);
+              current = resp.session.multiplier;
+            } else break;
+
+            await new Promise(res => setTimeout(res, 400));
+          }
+
+          if (target === 2) {
+            setTimeout(() => setEarned(prev => prev + 2), 1000);
+          }
+        }
+      } finally {
+        setUpgrading(false);
+
+        unsubReward();
+        unsubError();
+        unsubLoad();
+        unsubClosed();
+
+        resumeMining();
+      }
+    }
+  );
+
+  rewarded.load();
+};
+
+
+
+
 
   const formatTime = (s: number) => {
     const hh = Math.floor(s / 3600);
@@ -1843,6 +1971,23 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
             </LinearGradient>
           </TouchableOpacity>
         )}
+
+        <TouchableOpacity onPress={testNotification} activeOpacity={0.85} style={{ marginBottom: 16 }}>
+          <LinearGradient
+            colors={['#f59e0b', '#d97706']}
+            style={{
+              height: 50,
+              borderRadius: 12,
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.3)'
+            }}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>🧪 Test (10s)</Text>
+          </LinearGradient>
+        </TouchableOpacity>
 
         <View style={styles.svgContainer}>
           {starPositions.map((pos, i) => (

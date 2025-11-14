@@ -52,20 +52,13 @@ function App() {
 
 export default App;
 */
-
-
-
-
-
-
-
-
 import React, {useState, useEffect, useRef} from 'react';
 import {StatusBar, AppState, AppStateStatus} from 'react-native';
 import notifee, { EventType } from '@notifee/react-native';
 import SplashScreen from './Component/SplashScreen';
 import AuthNavigator from './Component/AuthNavigator';
 import NotificationService from './services/NotifcationService';
+import mobileAds from 'react-native-google-mobile-ads';
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -73,7 +66,18 @@ function App() {
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {
-    // Initialize notification service early (even during splash)
+   mobileAds()
+    .initialize()
+    .then(adapterStatuses => {
+      console.log("🔥 AdMob Initialized:", adapterStatuses);
+    })
+    .catch(err => {
+      console.log("❌ AdMob Init Error:", err);
+    });
+
+  // ✅ Initialize notification service early
+  initializeNotifications();
+
     initializeNotifications();
 
     // Listen for app state changes (foreground/background)
@@ -84,7 +88,8 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
+
+useEffect(() => {
     // Setup foreground notification listeners after navigation is ready
     if (!showSplash && navigationRef.current) {
       setupForegroundListeners();

@@ -509,6 +509,16 @@ class NotificationService {
     try {
       await this.initialize();
 
+      // Check if we can schedule exact alarms (Android 12+)
+      if (Platform.OS === 'android' && Platform.Version >= 31) {
+        try {
+          const alarmPermission = await notifee.getNotificationSettings();
+          console.log('📱 Alarm permission check:', alarmPermission);
+        } catch (error) {
+          console.warn('⚠️ Could not check alarm permissions:', error);
+        }
+      }
+
       const trigger: TimestampTrigger = {
         type: TriggerType.TIMESTAMP,
         timestamp: endTimestamp,
@@ -530,15 +540,8 @@ class NotificationService {
               launchActivity: 'default',
             },
             sound: 'default',
-            vibrationPattern: [300, 500, 300],
-            lightUpScreen: true,
-            category: 'alarm',
+            vibrationPattern: [300, 500],
             autoCancel: true,
-            data: {
-              type: 'mining_complete',
-              sessionId: String(sessionId),
-              screen: 'Mining',
-            },
           },
           ios: {
             sound: 'default',
@@ -634,13 +637,11 @@ class NotificationService {
   }
 }
 
-export default new NotificationService();
+const notificationService = new NotificationService();
+export default notificationService;
 
-// Named exports for convenience
-export const {
-  scheduleEndNotification,
-  showImmediate,
-  cancelScheduledNotification,
-  getScheduledNotifications,
-  cancelAllNotifications,
-} = new NotificationService();
+export const scheduleEndNotification = notificationService.scheduleEndNotification.bind(notificationService);
+export const showImmediate = notificationService.showImmediate.bind(notificationService);
+export const cancelScheduledNotification = notificationService.cancelScheduledNotification.bind(notificationService);
+export const getScheduledNotifications = notificationService.getScheduledNotifications.bind(notificationService);
+export const cancelAllNotifications = notificationService.cancelAllNotifications.bind(notificationService);
