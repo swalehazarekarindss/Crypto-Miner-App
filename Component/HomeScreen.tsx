@@ -180,8 +180,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          await authAPI.logout();
-          navigation.replace('Signup');
+          try {
+            await authAPI.logout();
+            navigation.replace('Login');
+          } catch (error) {
+            console.error('Logout error:', error);
+          }
         },
       },
     ]);
@@ -368,6 +372,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({navigation}) => {
               </Animated.View>
               <Text style={styles.actionCardTitle}>Leaderboard</Text>
               <Text style={styles.actionCardSubtitle}>View Top Miners</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Refer & Earn Card */}
+          <TouchableOpacity
+            style={styles.actionCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Refer')}>
+            <LinearGradient
+              colors={['#0C2B4E', '#9BB4C0']}
+              style={styles.actionCardGradient}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}>
+              <Animated.View style={{transform: [{translateY: floatAnim}]}}>
+                <Text style={styles.actionCardIcon}>🎁</Text>
+
+              </Animated.View>
+              <Text style={styles.actionCardTitle}>Refer & Earn</Text>
+              <Text style={styles.actionCardSubtitle}>Earn 200 Tokens</Text>
             </LinearGradient>
           </TouchableOpacity>
 

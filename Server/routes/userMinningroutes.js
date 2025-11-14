@@ -29,7 +29,7 @@ module.exports = router;*/
 
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, getUser, startMining, getMiningStatus, upgradeMultiplier, claimSession, getLeaderboard } = require('../controller/userController');
+const { registerUser, loginUser, getUser, startMining, getMiningStatus, upgradeMultiplier, claimSession, getLeaderboard, submitReferralCode } = require('../controller/userController');
 
 // Public routes
 router.post('/register', registerUser);
@@ -46,6 +46,9 @@ router.post('/mining/:sessionId/claim', claimSession);
 
 // Leaderboard
 router.get('/leaderboard', getLeaderboard);
+
+// Referral
+router.post('/referral/submit', submitReferralCode);
 
 module.exports = router;
 

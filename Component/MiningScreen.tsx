@@ -1276,14 +1276,14 @@ const BackgroundSVG = () => (
   <Svg height={height} width={width} style={styles.svgBackground}>
     <Defs>
       <RadialGradient id="grad1" cx="50%" cy="50%">
-        <Stop offset="0%" stopColor="#FFD6E8" stopOpacity="0.3" />
-        <Stop offset="100%" stopColor="#C9B6E4" stopOpacity="0.1" />
+        <Stop offset="0%" stopColor="#9BB4C0" stopOpacity="0.3" />
+        <Stop offset="100%" stopColor="#E6D8C3" stopOpacity="0.1" />
       </RadialGradient>
     </Defs>
     <Circle cx={width * 0.2} cy={height * 0.15} r="120" fill="url(#grad1)" />
-    <Circle cx={width * 0.8} cy={height * 0.3} r="90" fill="#E8DFF5" opacity={0.2} />
-    <Circle cx={width * 0.5} cy={height * 0.7} r="150" fill="#FDE2E4" opacity={0.25} />
-    <Circle cx={width * 0.9} cy={height * 0.8} r="100" fill="#DEEDF0" opacity={0.2} />
+    <Circle cx={width * 0.8} cy={height * 0.3} r="90" fill="#E6D8C3" opacity={0.2} />
+    <Circle cx={width * 0.5} cy={height * 0.7} r="150" fill="#016B61" opacity={0.25} />
+    <Circle cx={width * 0.9} cy={height * 0.8} r="100" fill="#E6D8C3" opacity={0.2} />
     <Path
       d={`M 0 ${height * 0.6} Q ${width * 0.25} ${height * 0.55} ${width * 0.5} ${height * 0.6} T ${width} ${height * 0.6} L ${width} ${height} L 0 ${height} Z`}
       fill="#F8EDEB"
@@ -1893,7 +1893,7 @@ const setMultiplier = async (target: number) => {
   });
 
   return (
-    <LinearGradient colors={['#749BC2', '#4682A9', '#91C8E4', '#98A1BC']} style={styles.container} start={{x: 0, y: 0}} end={{x: 1, y: 1}}>
+    <LinearGradient colors={['#1B3C53', '#1B3C53', '#1B3C53', '#1B3C53']} style={styles.container} start={{x: 0, y: 0}} end={{x: 1, y: 1}}>
       <BackgroundSVG />
       <View style={styles.inner}>
         <View style={styles.headerRow}>

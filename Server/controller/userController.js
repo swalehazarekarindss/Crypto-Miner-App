@@ -506,3 +506,70 @@ exports.getLeaderboard = async (req, res) => {
     res.status(500).json({ message: 'Server error.' });
   }
 };
+
+// --- Referral endpoints ---
+const Referral = require('../model/Referral.model');
+
+// Submit referral code
+exports.submitReferralCode = async (req, res) => {
+  try {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ message: 'Unauthorized.' });
+
+    const { referralCode } = req.body;
+    
+    if (!referralCode) {
+      return res.status(400).json({ message: 'Referral code is required.' });
+    }
+
+    // Get current user
+    const currentUser = await User.findOne({ walletId: decoded.walletId });
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Check if user already used a referral code
+    const existingReferral = await Referral.findOne({ referredWallet: currentUser.walletId });
+    if (existingReferral) {
+      return res.status(400).json({ message: 'You have already used a referral code.' });
+    }
+
+    // Check if referral code (walletId) exists
+    const referrer = await User.findOne({ walletId: referralCode });
+    if (!referrer) {
+      return res.status(400).json({ message: 'Invalid wallet ID.' });
+    }
+
+    // Prevent self-referral
+    if (referrer.walletId === currentUser.walletId) {
+      return res.status(400).json({ message: 'You cannot use your own referral code.' });
+    }
+
+    // Create referral record
+    const referral = new Referral({
+      referrerWallet: referrer.walletId,
+      referredWallet: currentUser.walletId,
+      rewardTokens: 200,
+    });
+    await referral.save();
+
+    // Give 200 tokens to referrer
+    referrer.totalToken = (referrer.totalToken || 0) + 200;
+    referrer.totalTokensEarned = (referrer.totalTokensEarned || 0) + 200;
+    await referrer.save();
+
+    res.status(200).json({ 
+      message: 'Referral code applied successfully!',
+      referrer: {
+        walletId: referrer.walletId,
+        tokensEarned: 200,
+      }
+    });
+  } catch (err) {
+    console.error('❌ submitReferralCode error:', err);
+    if (err.code === 11000) {
+      return res.status(400).json({ message: 'You have already used a referral code.' });
+    }
+    res.status(500).json({ message: 'Server error.' });
+  }
+};

@@ -255,6 +255,7 @@ import SignupScreen from './SignupScreen';
 import HomeScreen from './HomeScreen';
 import MiningScreen from './MiningScreen';
 import LeaderboardScreen from './LeaderboardScreen';
+import ReferPage from './ReferPage';
 import { authAPI } from '../services/api';
 
 const Stack = createNativeStackNavigator();
@@ -266,6 +267,7 @@ type RootStackParamList = {
   Home: { refresh?: boolean } | undefined;
   Mining: { sessionId: string };
   Leaderboard: undefined;
+  Refer: undefined;
 };
 
 const AuthNavigator = forwardRef<NavigationContainerRef<RootStackParamList>, {}>((props, ref) => {
@@ -314,6 +316,7 @@ const AuthNavigator = forwardRef<NavigationContainerRef<RootStackParamList>, {}>
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Mining" component={MiningScreen} />
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+        <Stack.Screen name="Refer" component={ReferPage} />
       </Stack.Navigator>
     </NavigationContainer>
   );

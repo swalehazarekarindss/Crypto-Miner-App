@@ -90,3 +90,10 @@ export const miningAPI = {
     return response.data;
   },
 };
+
+export const referralAPI = {
+  submitReferralCode: async (referralCode: string) => {
+    const response = await api.post('/referral/submit', { referralCode });
+    return response.data;
+  },
+};
