@@ -510,6 +510,23 @@ exports.getLeaderboard = async (req, res) => {
 // --- Referral endpoints ---
 const Referral = require('../model/Referral.model');
 
+// Check if user has used a referral code
+exports.checkReferralStatus = async (req, res) => {
+  try {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ message: 'Unauthorized.' });
+
+    const existingReferral = await Referral.findOne({ referredWallet: decoded.walletId });
+    
+    res.status(200).json({ 
+      hasUsedReferral: !!existingReferral,
+    });
+  } catch (err) {
+    console.error('❌ checkReferralStatus error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
 // Submit referral code
 exports.submitReferralCode = async (req, res) => {
   try {
@@ -570,6 +587,122 @@ exports.submitReferralCode = async (req, res) => {
     if (err.code === 11000) {
       return res.status(400).json({ message: 'You have already used a referral code.' });
     }
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+// UPDATED Claim session with 10% referral commission
+exports.claimSessionWithCommission = async (req, res) => {
+  try {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ message: 'Unauthorized.' });
+
+    const { sessionId } = req.params;
+    const session = await MiningSession.findById(sessionId);
+    if (!session) return res.status(404).json({ message: 'Session not found.' });
+
+    // compute earned tokens based on elapsed time, base rate and multiplier
+    const BASE_RATE = 0.01; // tokens per second
+    const now = new Date();
+    const start = session.miningStartTime || session.createdDate;
+    const elapsedSec = Math.max(0, Math.floor((now - start) / 1000));
+    const totalSecondsPlanned = (session.selectedHour || 1) * 3600;
+    const effectiveSeconds = Math.min(elapsedSec, totalSecondsPlanned);
+
+    const earned = effectiveSeconds * BASE_RATE * (session.multiplier || 1);
+
+    session.totalEarned = earned;
+    session.lastUpdated = new Date();
+    await session.save();
+
+    // Check if this user was referred and calculate commission
+    const referralRecord = await Referral.findOne({ referredWallet: session.walletId });
+    let commission = 0;
+    let userEarned = earned;
+
+    if (referralRecord) {
+      commission = earned * 0.10; // 10% commission
+      userEarned = earned - commission; // Deduct 10% from user's earnings
+      
+      // Give commission to referrer
+      const referrer = await User.findOne({ walletId: referralRecord.referrerWallet });
+      if (referrer) {
+        referrer.totalToken = (referrer.totalToken || 0) + commission;
+        referrer.totalTokensEarned = (referrer.totalTokensEarned || 0) + commission;
+        await referrer.save();
+        console.log(`✅ Referral commission: ${commission} tokens deducted from ${session.walletId} and given to ${referrer.walletId}`);
+      }
+    }
+
+    // Credit user balance (with commission deducted if applicable)
+    const user = await User.findOne({ walletId: session.walletId });
+    if (user) {
+      user.totalToken = (user.totalToken || 0) + userEarned;
+      user.totalTokensEarned = (user.totalTokensEarned || 0) + userEarned;
+      await user.save();
+    }
+
+    session.status = 'claimed';
+    await session.save();
+
+    res.status(200).json({ 
+      message: 'Claimed', 
+      earned: userEarned, 
+      totalEarned: earned,
+      commission: commission,
+      session, 
+      user 
+    });
+  } catch (err) {
+    console.error('❌ claimSession error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+// --- Watch Ad Reward ---
+const AdReward = require('../model/AdReward.model');
+
+exports.watchAdReward = async (req, res) => {
+  try {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ message: 'Unauthorized.' });
+
+    const { walletId } = req.body;
+
+    // Validate wallet ID matches logged in user
+    if (walletId !== decoded.walletId) {
+      return res.status(403).json({ message: 'Wallet ID mismatch.' });
+    }
+
+    // Generate random reward between 5 and 50
+    const randomRewardEarned = Math.floor(Math.random() * (50 - 5 + 1)) + 5;
+
+    // Save ad reward record
+    const adReward = new AdReward({
+      walletId: walletId,
+      rewardAmount: randomRewardEarned,
+    });
+    await adReward.save();
+
+    // Update user's total tokens
+    const user = await User.findOne({ walletId: walletId });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    user.totalToken = (user.totalToken || 0) + randomRewardEarned;
+    user.totalTokensEarned = (user.totalTokensEarned || 0) + randomRewardEarned;
+    await user.save();
+
+    res.status(200).json({
+      message: 'Ad reward claimed successfully!',
+      randomRewardEarned: randomRewardEarned,
+      newTotalToken: user.totalToken,
+    });
+  } catch (err) {
+    console.error('❌ watchAdReward error:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 };

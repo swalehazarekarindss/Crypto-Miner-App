@@ -1259,9 +1259,7 @@ const styles = StyleSheet.create({
 });
 
 export default MiningScreen;
-
-*/
-import React, {useEffect, useState, useRef, useMemo} from 'react';
+*/import React, {useEffect, useState, useRef, useMemo} from 'react';
 import {StyleSheet, Dimensions, View, Text, TouchableOpacity, Alert, ActivityIndicator, Animated} from 'react-native';
 import { RewardedAd, RewardedAdEventType, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import LinearGradient from 'react-native-linear-gradient';
@@ -1282,8 +1280,8 @@ const BackgroundSVG = () => (
     </Defs>
     <Circle cx={width * 0.2} cy={height * 0.15} r="120" fill="url(#grad1)" />
     <Circle cx={width * 0.8} cy={height * 0.3} r="90" fill="#E6D8C3" opacity={0.2} />
-    <Circle cx={width * 0.5} cy={height * 0.7} r="150" fill="#016B61" opacity={0.25} />
-    <Circle cx={width * 0.9} cy={height * 0.8} r="100" fill="#E6D8C3" opacity={0.2} />
+    <Circle cx={width * 0.1} cy={height * 0.6} r="150" fill="#4FB7B3" opacity={0.25} />
+    <Circle cx={width * 0.9} cy={height * 0.8} r="100" fill="#4FB7B3" opacity={0.2} />
     <Path
       d={`M 0 ${height * 0.6} Q ${width * 0.25} ${height * 0.55} ${width * 0.5} ${height * 0.6} T ${width} ${height * 0.6} L ${width} ${height} L 0 ${height} Z`}
       fill="#F8EDEB"
@@ -1505,7 +1503,10 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     const start = new Date(sess.miningStartTime || sess.createdDate).getTime();
     const planned = (sess.selectedHour || 1) * 3600;
     const now = Date.now();
-    const elapsed = Math.floor((now - start) / 1000);
+    //const elapsed = Math.floor((now - start) / 1000);
+
+    const elapsed = Math.max(0, Math.floor((now - start) / 1000));
+
     const left = Math.max(0, planned - elapsed);
     setSecondsLeft(left);
 
@@ -1534,7 +1535,8 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
       const plannedSec = planned;
       intervalRef.current = setInterval(() => {
         const nowTs = Date.now();
-        const elapsedNow = Math.floor((nowTs - startTs) / 1000);
+        // CLAMP elapsedNow to avoid negative values (fixed)
+        const elapsedNow = Math.max(0, Math.floor((nowTs - startTs) / 1000));
         const leftNow = Math.max(0, plannedSec - elapsedNow);
         if (completedRef.current) {
           return;
@@ -1560,7 +1562,9 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
         const start = new Date(s.miningStartTime || s.createdDate).getTime();
         const planned = (s.selectedHour || 1) * 3600;
         const now = Date.now();
-        const elapsed = Math.floor((now - start) / 1000);
+        //const elapsed = Math.floor((now - start) / 1000);
+        const elapsed = Math.max(0, Math.floor((now - start) / 1000));
+
         const left = Math.max(0, planned - elapsed);
         const effSec = Math.min(elapsed, planned);
         const mult = s.multiplier || 1;
@@ -1656,182 +1660,92 @@ const MiningScreen: React.FC<Props> = ({navigation, route}) => {
     if (s) startLocalTimer(s);
   };
 
-
-
-
-
-  /*
-
   const setMultiplier = async (target: number) => {
     if (!session) return;
+
     if (session.multiplier >= target) {
       setSession((s: any) => ({ ...s, multiplier: Math.min(target, s.multiplier) }));
       return;
     }
+
     setUpgrading(true);
     pauseMining();
     setAdShowing(true);
-    let rewardEarned = false;
+
     const rewarded = rewardedRef.current;
-    const unsubReward = rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-      rewardEarned = true;
-    });
-    const unsubClosed = rewarded.addAdEventListener(AdEventType.CLOSED, async () => {
-      setAdShowing(false);
-      try {
-        if (rewardEarned) {
-          let current = session.multiplier || 1;
-          while (current < target && current < 6) {
-            const resp = await miningAPI.upgradeMultiplier(session._id);
-            if (resp && resp.session) {
-              setSession(resp.session);
-              current = resp.session.multiplier || current + 1;
-            } else {
-              break;
-            }
-            await new Promise(res => setTimeout(res, 400));
-          }
-          if (target === 2) {
-            setTimeout(() => {
-              setEarned(prev => prev + 2);
-            }, 1000);
-          }
-        }
-      } catch (err) {
-        console.error('setMultiplier error:', err);
-        Alert.alert('Error', 'Could not set multiplier');
-      } finally {
+    let rewardEarned = false;
+
+    // When reward is earned
+    const unsubReward = rewarded.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      () => {
+        rewardEarned = true;
+      }
+    );
+
+    // When load fails → MUST use AdEventType.ERROR in v16
+    const unsubError = rewarded.addAdEventListener(
+      AdEventType.ERROR,
+      () => {
+        setAdShowing(false);
         setUpgrading(false);
+
         unsubReward();
         unsubClosed();
-        if (unsubLoad) unsubLoad();
-        if (unsubError) unsubError();
-        resumeMining();
-      }
-    });
-    const unsubError = rewarded.addAdEventListener(AdEventType.ERROR, () => {
-      setAdShowing(false);
-      setUpgrading(false);
-      unsubReward();
-      unsubClosed();
-      if (unsubLoad) unsubLoad();
-      resumeMining();
-      Alert.alert('Ad Error', 'Could not load ad. Please try again.');
-    });
-    rewarded.load();
-    const unsubLoad = rewarded.addAdEventListener(AdEventType.LOADED, () => {
-      rewarded.show();
-    });
-  };
-
-
-
-
-
-
-
-
-
-
-
-*/
-
-
-
-
-
-
-
-const setMultiplier = async (target: number) => {
-  if (!session) return;
-
-  if (session.multiplier >= target) {
-    setSession((s: any) => ({ ...s, multiplier: Math.min(target, s.multiplier) }));
-    return;
-  }
-
-  setUpgrading(true);
-  pauseMining();
-  setAdShowing(true);
-
-  const rewarded = rewardedRef.current;
-  let rewardEarned = false;
-
-  // When reward is earned
-  const unsubReward = rewarded.addAdEventListener(
-    RewardedAdEventType.EARNED_REWARD,
-    () => {
-      rewardEarned = true;
-    }
-  );
-
-  // When load fails → MUST use AdEventType.ERROR in v16
-  const unsubError = rewarded.addAdEventListener(
-    AdEventType.ERROR,
-    () => {
-      setAdShowing(false);
-      setUpgrading(false);
-
-      unsubReward();
-      unsubClosed();
-      unsubLoad();
-
-      resumeMining();
-      Alert.alert("Ad Error", "Could not load ad. Please try again.");
-    }
-  );
-
-  // When loaded → show
-  const unsubLoad = rewarded.addAdEventListener(
-    RewardedAdEventType.LOADED,
-    () => {
-      rewarded.show();
-    }
-  );
-
-  // When closed → MUST use AdEventType.CLOSED in v16
-  const unsubClosed = rewarded.addAdEventListener(
-    AdEventType.CLOSED,
-    async () => {
-      setAdShowing(false);
-
-      try {
-        if (rewardEarned) {
-          let current = session.multiplier || 1;
-
-          while (current < target && current < 6) {
-            const resp = await miningAPI.upgradeMultiplier(session._id);
-            if (resp?.session) {
-              setSession(resp.session);
-              current = resp.session.multiplier;
-            } else break;
-
-            await new Promise(res => setTimeout(res, 400));
-          }
-
-          if (target === 2) {
-            setTimeout(() => setEarned(prev => prev + 2), 1000);
-          }
-        }
-      } finally {
-        setUpgrading(false);
-
-        unsubReward();
-        unsubError();
         unsubLoad();
-        unsubClosed();
 
         resumeMining();
+        Alert.alert("Ad Error", "Could not load ad. Please try again.");
       }
-    }
-  );
+    );
 
-  rewarded.load();
-};
+    // When loaded → show
+    const unsubLoad = rewarded.addAdEventListener(
+      RewardedAdEventType.LOADED,
+      () => {
+        rewarded.show();
+      }
+    );
 
+    // When closed → MUST use AdEventType.CLOSED in v16
+    const unsubClosed = rewarded.addAdEventListener(
+      AdEventType.CLOSED,
+      async () => {
+        setAdShowing(false);
 
+        try {
+          if (rewardEarned) {
+            let current = session.multiplier || 1;
 
+            while (current < target && current < 6) {
+              const resp = await miningAPI.upgradeMultiplier(session._id);
+              if (resp?.session) {
+                setSession(resp.session);
+                current = resp.session.multiplier;
+              } else break;
 
+              await new Promise(res => setTimeout(res, 400));
+            }
+
+            if (target === 2) {
+              setTimeout(() => setEarned(prev => prev + 2), 1000);
+            }
+          }
+        } finally {
+          setUpgrading(false);
+
+          unsubReward();
+          unsubError();
+          unsubLoad();
+          unsubClosed();
+
+          resumeMining();
+        }
+      }
+    );
+
+    rewarded.load();
+  };
 
   const formatTime = (s: number) => {
     const hh = Math.floor(s / 3600);
@@ -1858,7 +1772,6 @@ const setMultiplier = async (target: number) => {
     return positions;
   }, []);
 
-  const multiplierEmojis = ['🌱','🌿','✨','💎','🚀','🌟'];
   const multiplierColors = [
     ['#10b981', '#059669'],
     ['#3b82f6', '#2563eb'],
@@ -1879,14 +1792,6 @@ const setMultiplier = async (target: number) => {
     }));
   });
 
-  const [flowerPositions] = useState(() => {
-    return Array.from({length: 15}, () => ({
-      left: 5 + Math.random() * 90,
-      bottom: Math.random() * 40,
-      size: 12 + Math.random() * 8,
-    }));
-  });
-
   const shimmerTranslateX = shimmerAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-width, width],
@@ -1896,13 +1801,38 @@ const setMultiplier = async (target: number) => {
     <LinearGradient colors={['#1B3C53', '#1B3C53', '#1B3C53', '#1B3C53']} style={styles.container} start={{x: 0, y: 0}} end={{x: 1, y: 1}}>
       <BackgroundSVG />
       <View style={styles.inner}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>⛏️ Mining</Text>
-          <View style={styles.statusBadge}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusText}>{paused || adShowing ? 'Paused' : 'Active'}</Text>
-          </View>
-        </View>
+       <View style={styles.headerRow}>
+
+  {/* Back Button */}
+  <TouchableOpacity
+    onPress={() => navigation.replace('Home')}
+    style={styles.backButton}
+    activeOpacity={0.8}
+  >
+    <LinearGradient
+      colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.1)']}
+      style={styles.backButtonInner}
+    >
+      <Text style={styles.backArrow}>←</Text>
+    </LinearGradient>
+  </TouchableOpacity>
+
+  {/* Title */}
+  <Text style={styles.title}>⛏️ Mining</Text>
+
+  {/* Status Badge */}
+  <View style={styles.statusBadge}>
+    <View style={styles.statusDot} />
+    <Text style={styles.statusText}>
+      {session?.status === 'claimed'
+        ? 'Claimed'
+        : paused || adShowing
+        ? 'Paused'
+        : 'Active'}
+    </Text>
+  </View>
+
+</View>
 
         <Animated.View style={[styles.box, {transform: [{scale: earnedScale}]}]}>
           <Text style={styles.boxLabel}>💰 Total Earned</Text>
@@ -1928,7 +1858,7 @@ const setMultiplier = async (target: number) => {
               return (
                 <>
                   <LinearGradient
-                    colors={['#10b981', '#059669', '#047857']}
+                    colors={['#7E99A3', '#89A8B2', '#3E5879']}
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
                     style={[styles.progressFill, {width: `${pct}%`}]}
@@ -1947,37 +1877,13 @@ const setMultiplier = async (target: number) => {
           </View>
         </View>
 
-        <View style={styles.multRow}>
-          <Text style={styles.multLabel}>⚡ Multiplier</Text>
-          <Text style={styles.multValue}>{session?.multiplier || 1}x</Text>
-        </View>
-
-        {(secondsLeft === 0 && session && session.status !== 'claimed') && (
-          <TouchableOpacity onPress={handleClaimRewards} activeOpacity={0.85} style={{ marginBottom: 16 }}>
-            <LinearGradient
-              colors={['#10b981', '#059669']}
-              style={{
-                height: 60,
-                borderRadius: 16,
-                justifyContent: 'center',
-                alignItems: 'center',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.3)'
-              }}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 0}}>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>🎁 Claim Reward</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 4 }}>Tap to claim {earned.toFixed(2)} CMT</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity onPress={testNotification} activeOpacity={0.85} style={{ marginBottom: 16 }}>
+        <TouchableOpacity onPress={testNotification} activeOpacity={0.85} style={{ marginBottom: 10, alignSelf: 'flex-end' }}>
           <LinearGradient
-            colors={['#f59e0b', '#d97706']}
+            colors={['#78B3CE', '#89A8B2']}
             style={{
-              height: 50,
-              borderRadius: 12,
+              height: 20,
+              paddingHorizontal: 16,
+              borderRadius: 18,
               justifyContent: 'center',
               alignItems: 'center',
               borderWidth: 1,
@@ -1985,7 +1891,7 @@ const setMultiplier = async (target: number) => {
             }}
             start={{x: 0, y: 0}}
             end={{x: 1, y: 0}}>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>🧪 Test (10s)</Text>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>🧪 Test</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -2010,21 +1916,29 @@ const setMultiplier = async (target: number) => {
             <Animated.View style={[styles.halo, { width: haloSmall, height: haloSmall, borderRadius: haloSmall / 2, left: ((width - 40) / 2) - (haloSmall / 2), top: 175 - (haloSmall / 2), backgroundColor: 'rgba(139,92,246,0.16)', transform: [{ scale: haloAnim.interpolate({ inputRange: [0,1], outputRange: [1.02, 1.08] }) }], opacity: haloAnim.interpolate({ inputRange: [0,1], outputRange: [0.14, 0.28] }) }]} />
           </View>
 
-          {flowerPositions.map((pos, i) => (
-            <Text
-              key={`flower-${i}`}
-              style={[
-                styles.flower,
-                {
-                  left: `${pos.left}%`,
-                  bottom: `${pos.bottom}%`,
-                  fontSize: pos.size,
-                }
-              ]}
-            >
-              ❀
-            </Text>
-          ))}
+          {/* Central Upgrade/Claim Button */}
+          <View style={styles.centerButton}>
+            {(secondsLeft === 0 && session && session.status !== 'claimed') ? (
+              <TouchableOpacity onPress={handleClaimRewards} activeOpacity={0.85}>
+                <LinearGradient
+                  colors={['#FB6D48', '#824D74']}
+                  style={styles.centralBtn}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 0}}>
+                  <Animated.View style={[styles.centralBtnGlow, { opacity: haloAnim }]} />
+                  <Text style={styles.centralBtnEmoji}>🎁</Text>
+                  <Text style={styles.centralBtnText}>Claim</Text>
+                  <Text style={styles.centralBtnSubtext}>{earned.toFixed(2)} CMT</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.centralBtnInactive}>
+                <Text style={styles.centralBtnEmoji}>⚡</Text>
+                <Text style={styles.centralBtnText}>Upgrade</Text>
+                <Text style={styles.centralBtnSubtext}>Watch ads</Text>
+              </View>
+            )}
+          </View>
 
           {circlePositions.map((pos, idx) => {
             const multiplier = idx + 1;
@@ -2038,6 +1952,11 @@ const setMultiplier = async (target: number) => {
               outputRange: ['0deg', '360deg'],
             });
 
+            const pulseScale = anim.scale.interpolate({
+              inputRange: [1, 1.15],
+              outputRange: [1, 1.2],
+            });
+
             return (
               <Animated.View
                 key={multiplier}
@@ -2047,16 +1966,20 @@ const setMultiplier = async (target: number) => {
                     left: `${pos.x}%`,
                     top: `${pos.y}%`,
                     transform: [
-                      {translateX: -32},
-                      {translateY: -32},
-                      {scale: anim.scale},
-                      {rotate: isActive ? rotateZ : '0deg'},
+                      {translateX: -40},
+                      {translateY: -40},
+                      {scale: isActive ? pulseScale : (isPassed ? 0.9 : 1)},
                     ],
+                    zIndex: isActive ? 10 : (isPassed ? 1 : 5),
                   },
                 ]}
               >
                 {isActive && (
                   <>
+                    <Animated.View style={[styles.activeRing, {
+                      transform: [{ rotate: rotateZ }],
+                      borderColor: colors[0],
+                    }]} />
                     {particleAnims.map((particle, pIdx) => (
                       <Animated.View
                         key={`particle-${pIdx}`}
@@ -2064,6 +1987,7 @@ const setMultiplier = async (target: number) => {
                           styles.particle,
                           {
                             opacity: particle.opacity,
+                            backgroundColor: colors[0],
                             transform: [
                               {translateX: particle.translateX},
                               {translateY: particle.translateY},
@@ -2082,10 +2006,7 @@ const setMultiplier = async (target: number) => {
                 >
                   <LinearGradient
                     colors={isActive ? colors : isPassed ? ['#4a5568', '#2d3748'] : ['#1e3a5f', '#0f2950']}
-                    style={[
-                      styles.multiplierBtn,
-                      isPassed && styles.multiplierBtnPassed,
-                    ]}
+                    style={styles.multiplierCircle}
                   >
                     {isActive && (
                       <Animated.View
@@ -2098,14 +2019,9 @@ const setMultiplier = async (target: number) => {
                         ]}
                       />
                     )}
-                    <View style={styles.multiplierBtnInner}>
-                      <Text style={styles.multiplierEmoji}>{multiplierEmojis[idx]}</Text>
-                      <Text style={[styles.multiplierBtnText, isActive && styles.multiplierBtnTextActive]}>{multiplier}x</Text>
-                      {isActive && (
-                        <View style={styles.activeBadge}>
-                          <View style={styles.activeDot} />
-                        </View>
-                      )}
+                    <View style={styles.multiplierCircleInner}>
+                      <Text style={[styles.multiplierNumber, isActive && styles.multiplierNumberActive]}>{multiplier}x</Text>
+                      <Text style={styles.speedIcon}>⚡</Text>
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -2158,7 +2074,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   box: {
-    backgroundColor: '#0f2950',
+    backgroundColor: '#C4E1E6',
+  
     padding: 20,
     borderRadius: 16,
     marginBottom: 16,
@@ -2179,13 +2096,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   boxLabel: { color: '#9fb7da', fontSize: 14, fontWeight: '600' },
-  boxValue: { color: '#fff', fontSize: 32, fontWeight: '700', marginTop: 8 },
+  boxValue: { color: '#254D70', fontSize: 32, fontWeight: '700', marginTop: 8 },
   timerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    backgroundColor: 'rgba(15,41,80,0.5)',
+    marginBottom: 11,
+    backgroundColor: 'EBFFD8',
     padding: 12,
     borderRadius: 12,
   },
@@ -2196,7 +2113,7 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   progressBar: {
     flex: 1,
-    height: 16,
+    height: 15,
     backgroundColor: '#12334f',
     borderRadius: 10,
     overflow: 'hidden',
@@ -2207,7 +2124,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   progressFill: {
-    height: 16,
+    height: 15,
     borderRadius: 10,
   },
   shimmer: {
@@ -2219,20 +2136,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   multBadge: {
-    width: 60,
-    height: 60,
+    width: 50,
+    height: 50,
     borderRadius: 12,
     backgroundColor: '#08263f',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-    shadowColor: '#10b981',
+    shadowColor: '#9ACBD01',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 6,
   },
-  multBadgeText: { color: '#10b981', fontWeight: '700', fontSize: 18 },
+  multBadgeText: { color: '#9ACBD0', fontWeight: '700', fontSize: 18 },
   multRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2274,15 +2191,88 @@ const styles = StyleSheet.create({
     color: '#4a90e2',
     opacity: 0.4,
   },
+  centerButton: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: [{translateX: -60}, {translateY: -60}],
+    zIndex: 100,
+  },
+  centralBtn: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#6A9C89',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 16,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.3)',
+    overflow: 'hidden',
+  },
+  centralBtnInactive: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0f2950',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  centralBtnGlow: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#824D74',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  centralBtnEmoji: {
+    fontSize: 36,
+    marginBottom: 4,
+  },
+  centralBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  centralBtnSubtext: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    marginTop: 2,
+  },
   multiplierBtnWrapper: {
     position: 'absolute',
-    width: 64,
-    height: 64,
+    width: 80,
+    height: 80,
   },
-  multiplierBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
+  activeRing: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 45,
+    borderWidth: 3,
+    borderStyle: 'dashed',
+    left: -5,
+    top: -5,
+  },
+  multiplierCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -2294,53 +2284,45 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
     overflow: 'hidden',
   },
-  multiplierBtnPassed: {
-    opacity: 0.5,
-  },
-  btnGlow: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 15,
-    elevation: 15,
-  },
-  multiplierBtnInner: {
+  multiplierCircleInner: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  multiplierEmoji: { fontSize: 24, marginBottom: 2 },
-  multiplierBtnText: {
+  multiplierNumber: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
+    marginBottom: 2,
   },
-  multiplierBtnTextActive: {
+  multiplierNumberActive: {
     color: '#fff',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  activeBadge: {
-    marginTop: 2,
+  speedIcon: {
+    fontSize: 16,
+    opacity: 0.9,
   },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#fff',
+  btnGlow: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 20,
   },
   particle: {
     position: 'absolute',
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#fff',
-    top: 30,
-    left: 30,
+    top: 37,
+    left: 37,
   },
   upgradingOverlay: {
     position: 'absolute',
@@ -2364,6 +2346,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+
+backButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 10,
+  overflow: 'hidden',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 8,
+},
+
+backButtonInner: {
+  width: '100%',
+  height: '100%',
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.3)',
+  borderRadius: 10,
+},
+
+backArrow: {
+  color: '#fff',
+  fontSize: 20,
+  fontWeight: '700',
+},
+
 });
 
 export default MiningScreen;

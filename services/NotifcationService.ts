@@ -509,6 +509,13 @@ class NotificationService {
     try {
       await this.initialize();
 
+      // Check if timestamp is in the future
+      const now = Date.now();
+      if (endTimestamp <= now) {
+        console.warn('⚠️ Cannot schedule notification: end time is in the past');
+        return null;
+      }
+
       // Check if we can schedule exact alarms (Android 12+)
       if (Platform.OS === 'android' && Platform.Version >= 31) {
         try {

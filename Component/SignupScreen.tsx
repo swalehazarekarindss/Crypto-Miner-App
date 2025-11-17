@@ -121,7 +121,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="#749BC2" />
 
       <LinearGradient 
-        colors={['#749BC2', '#4682A9', '#91C8E4', '#98A1BC']} 
+        colors={['#1B3C53', '#1B3C53', '#1B3C53', '#1B3C53']} 
         style={styles.gradient}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 1}}

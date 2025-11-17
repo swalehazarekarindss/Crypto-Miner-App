@@ -136,9 +136,9 @@ const LeaderboardScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const getGradientColors = (index: number): [string, string] => {
-    if (index === 0) return ['#B95E82', '#FFA500']; // Gold
-    if (index === 1) return ['#B95E82', '#A8A8A8']; // Silver
-    if (index === 2) return ['#B95E82', '#B87333']; // Bronze
+    if (index === 0) return ['#BED7DC', '#B3C8CF']; // Gold
+    if (index === 1) return ['#BED7DC', '#B3C8CF']; // Silver
+    if (index === 2) return ['#BED7DC', '#B3C8CF']; // Bronze
     return ['#F2EAD3', '#DDC3C3']; // Default
   };
 

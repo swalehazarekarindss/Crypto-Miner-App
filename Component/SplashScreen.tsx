@@ -93,7 +93,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({onFinish}) => {
 
   return (
     <LinearGradient
-      colors={['#749BC2', '#4682A9', '#91C8E4', '#98A1BC']}
+      colors={['#1B3C53', '#1B3C53', '#1B3C53', '#1B3C53']}
       style={styles.container}
       start={{x: 0, y: 0}}
       end={{x: 1, y: 1}}>

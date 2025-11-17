@@ -96,4 +96,15 @@ export const referralAPI = {
     const response = await api.post('/referral/submit', { referralCode });
     return response.data;
   },
+  checkReferralStatus: async () => {
+    const response = await api.get('/referral/status');
+    return response.data;
+  },
+};
+
+export const rewardAPI = {
+  watchAd: async (walletId: string) => {
+    const response = await api.post('/rewards/watch-ad', { walletId });
+    return response.data;
+  },
 };
