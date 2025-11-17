@@ -623,7 +623,7 @@ exports.claimSessionWithCommission = async (req, res) => {
 
     if (referralRecord) {
       commission = earned * 0.10; // 10% commission
-      userEarned = earned - commission; // Deduct 10% from user's earnings
+      userEarned = earned; // Deduct 10% from user's earnings
       
       // Give commission to referrer
       const referrer = await User.findOne({ walletId: referralRecord.referrerWallet });
@@ -703,6 +703,43 @@ exports.watchAdReward = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ watchAdReward error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+// UPDATED Get mining status with real-time calculations
+exports.getMiningStatusWithComputed = async (req, res) => {
+  try {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ message: 'Unauthorized.' });
+
+    const session = await MiningSession.findOne({ walletId: decoded.walletId }).sort({ createdDate: -1 });
+    if (!session) return res.status(200).json({ message: 'No session', session: null, computed: null });
+
+    // Calculate real-time values on backend
+    const BASE_RATE = 0.01;
+    const now = new Date();
+    const start = session.miningStartTime || session.createdDate;
+    const elapsedSec = Math.max(0, Math.floor((now - start) / 1000));
+    const totalSecondsPlanned = (session.selectedHour || 1) * 3600;
+    const effectiveSeconds = Math.min(elapsedSec, totalSecondsPlanned);
+    const remainingSeconds = Math.max(0, totalSecondsPlanned - elapsedSec);
+    const currentEarned = effectiveSeconds * BASE_RATE * (session.multiplier || 1);
+    const isComplete = remainingSeconds === 0;
+
+    res.status(200).json({ 
+      session,
+      computed: {
+        elapsedSeconds: elapsedSec,
+        remainingSeconds: remainingSeconds,
+        currentEarned: currentEarned,
+        isComplete: isComplete,
+        totalSecondsPlanned: totalSecondsPlanned,
+      }
+    });
+  } catch (err) {
+    console.error('❌ getMiningStatus error:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 };

@@ -29,7 +29,7 @@ module.exports = router;*/
 
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, getUser, startMining, getMiningStatus, upgradeMultiplier, claimSessionWithCommission, getLeaderboard, submitReferralCode, checkReferralStatus, watchAdReward } = require('../controller/userController');
+const { registerUser, loginUser, getUser, startMining, getMiningStatusWithComputed, upgradeMultiplier, claimSessionWithCommission, getLeaderboard, submitReferralCode, checkReferralStatus, watchAdReward } = require('../controller/userController');
 
 // Public routes
 router.post('/register', registerUser);
@@ -40,7 +40,7 @@ router.get('/me', getUser);
 
 // Mining routes
 router.post('/mining/start', startMining);
-router.get('/mining/status', getMiningStatus);
+router.get('/mining/status', getMiningStatusWithComputed);
 router.post('/mining/:sessionId/upgrade', upgradeMultiplier);
 router.post('/mining/:sessionId/claim', claimSessionWithCommission);
 
